@@ -5,6 +5,8 @@ using MudBlazor.Services;
 using Treasury.App.Application.Dashboard;
 using Treasury.App.Components;
 using Treasury.App.Contracts.Accounts;
+using Treasury.App.Contracts.Bills;
+using Treasury.App.Contracts.Budgets;
 using Treasury.App.Contracts.Transactions;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Auth;
@@ -183,12 +185,152 @@ app.MapGet("/api/dashboard/summary", async (TreasuryDbContext db) =>
     var rates = new Dictionary<string, decimal>
     {
         ["EUR"] = 4.6m,
-        ["USD"] = 3.9m
+        ["USD"] = 3.9m,
+        ["GBP"] = 5.3m
     };
 
     var summary = new DashboardSummaryService().BuildSummary(accounts, rates);
     return Results.Ok(summary);
 });
+
+app.MapGet("/api/budgets", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var budgets = await db.BudgetCategories
+        .Where(x => x.HouseholdId == user.HouseholdId)
+        .OrderBy(x => x.Name)
+        .Select(x => new
+        {
+            x.Id,
+            x.Name,
+            x.MonthlyLimit,
+            x.Currency,
+            x.Notes
+        })
+        .ToListAsync();
+
+    return Results.Ok(budgets);
+}).RequireAuthorization();
+
+app.MapPost("/api/budgets", async (HttpContext httpContext, CreateBudgetCategoryRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Name) || request.MonthlyLimit <= 0m)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["name"] = ["Budget category is required."],
+            ["monthlyLimit"] = ["Monthly limit must be greater than zero."]
+        });
+    }
+
+    var budget = new BudgetCategory
+    {
+        HouseholdId = user.HouseholdId,
+        Name = request.Name.Trim(),
+        MonthlyLimit = request.MonthlyLimit,
+        Currency = string.IsNullOrWhiteSpace(request.Currency) ? "PLN" : request.Currency.Trim().ToUpperInvariant(),
+        Notes = request.Notes?.Trim() ?? string.Empty,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    db.BudgetCategories.Add(budget);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/budgets/{budget.Id}", new
+    {
+        budget.Id,
+        budget.Name,
+        budget.MonthlyLimit,
+        budget.Currency,
+        budget.Notes
+    });
+}).RequireAuthorization();
+
+app.MapGet("/api/bills", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var bills = await db.Bills
+        .Where(x => x.HouseholdId == user.HouseholdId)
+        .OrderBy(x => x.DueDay)
+        .ThenBy(x => x.Name)
+        .Select(x => new
+        {
+            x.Id,
+            x.Name,
+            x.Category,
+            x.Amount,
+            x.Currency,
+            x.DueDay,
+            x.IsPaid,
+            x.Notes
+        })
+        .ToListAsync();
+
+    return Results.Ok(bills);
+}).RequireAuthorization();
+
+app.MapPost("/api/bills", async (HttpContext httpContext, CreateBillRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Name))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["name"] = ["Bill name is required."]
+        });
+    }
+
+    var bill = new Bill
+    {
+        HouseholdId = user.HouseholdId,
+        Name = request.Name.Trim(),
+        Category = string.IsNullOrWhiteSpace(request.Category) ? "General" : request.Category.Trim(),
+        Amount = request.Amount,
+        Currency = string.IsNullOrWhiteSpace(request.Currency) ? "PLN" : request.Currency.Trim().ToUpperInvariant(),
+        DueDay = request.DueDay <= 0 ? 1 : Math.Min(request.DueDay, 31),
+        IsPaid = request.IsPaid,
+        Notes = request.Notes?.Trim() ?? string.Empty,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    db.Bills.Add(bill);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/bills/{bill.Id}", new
+    {
+        bill.Id,
+        bill.Name,
+        bill.Category,
+        bill.Amount,
+        bill.Currency,
+        bill.DueDay,
+        bill.IsPaid,
+        bill.Notes
+    });
+}).RequireAuthorization();
 
 app.MapGet("/api/accounts", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
 {
@@ -271,6 +413,7 @@ app.MapGet("/api/transactions", async (HttpContext httpContext, TreasuryDbContex
             x.Id,
             x.AccountId,
             x.Description,
+            x.Category,
             x.Amount,
             x.Currency,
             x.Type,
@@ -324,6 +467,7 @@ app.MapPost("/api/transactions", async (HttpContext httpContext, CreateTransacti
         HouseholdId = user.HouseholdId,
         AccountId = account.Id,
         Description = request.Description.Trim(),
+        Category = string.IsNullOrWhiteSpace(request.Category) ? "General" : request.Category.Trim(),
         Amount = request.Amount,
         Currency = string.IsNullOrWhiteSpace(request.Currency) ? account.Currency : request.Currency.Trim().ToUpperInvariant(),
         Type = normalizedType,
@@ -340,6 +484,7 @@ app.MapPost("/api/transactions", async (HttpContext httpContext, CreateTransacti
         transaction.Id,
         transaction.AccountId,
         transaction.Description,
+        transaction.Category,
         transaction.Amount,
         transaction.Currency,
         transaction.Type,

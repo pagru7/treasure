@@ -1,0 +1,154 @@
+@page "/budgets"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Monthly budgets</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">Track category limits for groceries, bills, travel, and family spending.</MudText>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudTextField Label="Category" @bind-Value="_newBudget.Name" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudNumericField Label="Monthly limit" @bind-Value="_newBudget.MonthlyLimit" Required="true" Min="0.01m" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudTextField Label="Currency" @bind-Value="_newBudget.Currency" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudTextField Label="Notes" @bind-Value="_newBudget.Notes" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="SaveBudgetAsync" Class="mt-4">Add budget</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @if (_rows.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No budget categories yet. Set your first monthly cap to keep family spending on track.</MudAlert>
+        }
+        else
+        {
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudTable T="BudgetRow" Items="_rows" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Category</MudTh>
+                        <MudTh>Limit</MudTh>
+                        <MudTh>Spent this month</MudTh>
+                        <MudTh>Remaining</MudTh>
+                        <MudTh>Status</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Category">@context.Name</MudTd>
+                        <MudTd DataLabel="Limit">@context.Limit.ToString("N2") @context.Currency</MudTd>
+                        <MudTd DataLabel="Spent this month">@context.Spent.ToString("N2") @context.Currency</MudTd>
+                        <MudTd DataLabel="Remaining">
+                            <MudText Color="@(context.Remaining >= 0 ? Color.Success : Color.Error)">@context.Remaining.ToString("N2") @context.Currency</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            @if (context.Remaining >= 0)
+                            {
+                                <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined" Size="Size.Small">On track</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small">Over budget</MudChip>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<BudgetRow> _rows = new();
+    private Guid _householdId;
+    private readonly NewBudgetForm _newBudget = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _householdId = await DbContext.Households
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var budgets = await DbContext.BudgetCategories
+            .Where(x => x.HouseholdId == _householdId)
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+
+        var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthlyExpenses = await DbContext.Transactions
+            .Where(x => x.HouseholdId == _householdId && x.TransactionDate >= monthStart && x.Type == "expense")
+            .ToListAsync();
+
+        _rows.Clear();
+        foreach (var budget in budgets)
+        {
+            var spent = monthlyExpenses
+                .Where(x => x.Category.Equals(budget.Name, StringComparison.OrdinalIgnoreCase))
+                .Sum(x => x.Amount);
+
+            _rows.Add(new BudgetRow(
+                budget.Id,
+                budget.Name,
+                budget.MonthlyLimit,
+                budget.Currency,
+                spent,
+                budget.MonthlyLimit - spent));
+        }
+    }
+
+    private async Task SaveBudgetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newBudget.Name) || _newBudget.MonthlyLimit <= 0m)
+        {
+            Snackbar.Add("Budget category and a positive monthly limit are required.", Severity.Warning);
+            return;
+        }
+
+        var budget = new Treasury.App.Domain.BudgetCategory
+        {
+            HouseholdId = _householdId,
+            Name = _newBudget.Name.Trim(),
+            MonthlyLimit = _newBudget.MonthlyLimit,
+            Currency = string.IsNullOrWhiteSpace(_newBudget.Currency) ? "PLN" : _newBudget.Currency.Trim().ToUpperInvariant(),
+            Notes = _newBudget.Notes?.Trim() ?? string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        DbContext.BudgetCategories.Add(budget);
+        await DbContext.SaveChangesAsync();
+
+        _newBudget.Name = string.Empty;
+        _newBudget.MonthlyLimit = 0m;
+        _newBudget.Currency = "PLN";
+        _newBudget.Notes = string.Empty;
+
+        Snackbar.Add("Budget saved.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private sealed class NewBudgetForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public decimal MonthlyLimit { get; set; }
+        public string Currency { get; set; } = "PLN";
+        public string Notes { get; set; } = string.Empty;
+    }
+
+    private sealed record BudgetRow(Guid Id, string Name, decimal Limit, string Currency, decimal Spent, decimal Remaining);
+}

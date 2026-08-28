@@ -71,6 +71,7 @@ public static class InitialSeed
                         HouseholdId = householdId,
                         AccountId = mainWallet,
                         Description = "Salary deposit",
+                        Category = "Income",
                         Amount = 4200.00m,
                         Currency = "PLN",
                         Type = "income",
@@ -83,6 +84,7 @@ public static class InitialSeed
                         HouseholdId = householdId,
                         AccountId = mainWallet,
                         Description = "Groceries",
+                        Category = "Groceries",
                         Amount = 480.32m,
                         Currency = "PLN",
                         Type = "expense",
@@ -95,6 +97,7 @@ public static class InitialSeed
                         HouseholdId = householdId,
                         AccountId = mainWallet,
                         Description = "Home savings transfer",
+                        Category = "Savings",
                         Amount = 1000.00m,
                         Currency = "PLN",
                         Type = "transfer",
@@ -103,6 +106,97 @@ public static class InitialSeed
                         UpdatedAt = DateTime.UtcNow
                     });
             }
+        }
+
+        if (!await db.BudgetCategories.AnyAsync(cancellationToken))
+        {
+            var householdId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            db.BudgetCategories.AddRange(
+                new BudgetCategory
+                {
+                    HouseholdId = householdId,
+                    Name = "Groceries",
+                    MonthlyLimit = 2200.00m,
+                    Currency = "PLN",
+                    Notes = "Food and household supplies",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new BudgetCategory
+                {
+                    HouseholdId = householdId,
+                    Name = "Housing",
+                    MonthlyLimit = 3200.00m,
+                    Currency = "PLN",
+                    Notes = "Rent, mortgage and housing",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new BudgetCategory
+                {
+                    HouseholdId = householdId,
+                    Name = "Utilities",
+                    MonthlyLimit = 900.00m,
+                    Currency = "PLN",
+                    Notes = "Internet, electricity, water",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new BudgetCategory
+                {
+                    HouseholdId = householdId,
+                    Name = "Leisure",
+                    MonthlyLimit = 900.00m,
+                    Currency = "PLN",
+                    Notes = "Restaurants and fun spending",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+        }
+
+        if (!await db.Bills.AnyAsync(cancellationToken))
+        {
+            var householdId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            db.Bills.AddRange(
+                new Bill
+                {
+                    HouseholdId = householdId,
+                    Name = "Rent",
+                    Category = "Housing",
+                    Amount = 2850.00m,
+                    Currency = "PLN",
+                    DueDay = 5,
+                    IsPaid = false,
+                    Notes = "Apartment rent",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new Bill
+                {
+                    HouseholdId = householdId,
+                    Name = "Internet",
+                    Category = "Utilities",
+                    Amount = 119.99m,
+                    Currency = "PLN",
+                    DueDay = 12,
+                    IsPaid = false,
+                    Notes = "Home internet bill",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new Bill
+                {
+                    HouseholdId = householdId,
+                    Name = "Gym",
+                    Category = "Health",
+                    Amount = 190.00m,
+                    Currency = "PLN",
+                    DueDay = 18,
+                    IsPaid = true,
+                    Notes = "Family membership",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
         }
 
         await db.SaveChangesAsync(cancellationToken);

@@ -31,7 +31,7 @@
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Class="pa-4 rounded-xl" Elevation="2">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Bills due</MudText>
-                    <MudText Typo="Typo.h5" Class="mt-2">@_upcomingCount upcoming</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2">@_billsDueCount upcoming</MudText>
                 </MudPaper>
             </MudItem>
         </MudGrid>
@@ -56,12 +56,33 @@
                     <MudText Typo="Typo.h6">Quick actions</MudText>
                     <MudStack Class="mt-3" Spacing="2">
                         <MudButton Variant="Variant.Filled" Color="Color.Tertiary" Href="/accounts">Create account</MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Href="/rates">View rates</MudButton>
-                        <MudButton Variant="Variant.Text" Color="Color.Tertiary" Href="/transactions">Update rates</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Href="/budgets">Set budgets</MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Tertiary" Href="/rates">View rates</MudButton>
                     </MudStack>
                 </MudPaper>
             </MudItem>
         </MudGrid>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudText Typo="Typo.h6">Budget health</MudText>
+            @if (_budgetStatus.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">No budgets created yet. Add your first monthly category cap to start tracking family spending.</MudText>
+            }
+            else
+            {
+                <MudStack Class="mt-3" Spacing="2">
+                    @foreach (var item in _budgetStatus)
+                    {
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <MudText>@item.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatCurrency(item.Spent, item.Currency) / @FormatCurrency(item.Limit, item.Currency)</MudText>
+                        </MudStack>
+                        <MudProgressLinear Value="@(Math.Clamp((double)(item.Spent / Math.Max(item.Limit, 0.01m) * 100m), 0, 100))" Color="@(item.IsOverBudget ? Color.Error : Color.Success)" Rounded="true" Size="Size.Medium" />
+                    }
+                </MudStack>
+            }
+        </MudPaper>
     </MudStack>
 </MudContainer>
 
@@ -69,8 +90,9 @@
     private Treasury.App.Application.Dashboard.DashboardSummaryResponse _summary = new();
     private readonly Dictionary<string, decimal> _totalsByCurrency = new();
     private readonly List<Treasury.App.Domain.Transaction> _recentTransactions = new();
+    private readonly List<BudgetStatusItem> _budgetStatus = new();
     private decimal _recentCashFlow;
-    private int _upcomingCount;
+    private int _billsDueCount;
 
     protected override async Task OnInitializedAsync()
     {
@@ -118,7 +140,34 @@
             .Where(x => x.Currency == "PLN")
             .Sum(x => x.Type == "expense" ? -x.Amount : x.Type == "income" ? x.Amount : 0m);
 
-        _upcomingCount = Math.Max(0, 3 - _recentTransactions.Count);
+        _billsDueCount = await DbContext.Bills
+            .Where(x => x.HouseholdId == householdId && !x.IsPaid)
+            .CountAsync();
+
+        var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var thisMonthExpenses = await DbContext.Transactions
+            .Where(x => x.HouseholdId == householdId && x.TransactionDate >= monthStart && x.Type == "expense")
+            .ToListAsync();
+
+        var budgets = await DbContext.BudgetCategories
+            .Where(x => x.HouseholdId == householdId)
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+
+        _budgetStatus.Clear();
+        foreach (var budget in budgets)
+        {
+            var spent = thisMonthExpenses
+                .Where(x => x.Category.Equals(budget.Name, StringComparison.OrdinalIgnoreCase))
+                .Sum(x => x.Amount);
+
+            _budgetStatus.Add(new BudgetStatusItem(
+                budget.Name,
+                budget.MonthlyLimit,
+                budget.Currency,
+                spent,
+                spent > budget.MonthlyLimit));
+        }
     }
 
     private static string FormatCurrency(decimal value, string currency) => $"{value:N2} {currency}";
@@ -128,4 +177,6 @@
         var prefix = value >= 0 ? "+" : "-";
         return $"{prefix}{Math.Abs(value):N2} {currency}";
     }
+
+    private sealed record BudgetStatusItem(string Name, decimal Limit, string Currency, decimal Spent, bool IsOverBudget);
 }

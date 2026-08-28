@@ -21,6 +21,9 @@
                     <MudTextField Label="Description" @bind-Value="_newTransaction.Description" Required="true" />
                 </MudItem>
                 <MudItem xs="12" md="2">
+                    <MudTextField Label="Category" @bind-Value="_newTransaction.Category" />
+                </MudItem>
+                <MudItem xs="12" md="2">
                     <MudNumericField Label="Amount" @bind-Value="_newTransaction.Amount" Required="true" Min="0.01m" />
                 </MudItem>
                 <MudItem xs="12" md="2">
@@ -50,6 +53,7 @@
                 <MudTable T="Treasury.App.Domain.Transaction" Items="_transactions" Hover="true" Dense="true">
                     <HeaderContent>
                         <MudTh>Description</MudTh>
+                        <MudTh>Category</MudTh>
                         <MudTh>Account</MudTh>
                         <MudTh>Type</MudTh>
                         <MudTh>Amount</MudTh>
@@ -57,6 +61,7 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Description">@context.Description</MudTd>
+                        <MudTd DataLabel="Category">@context.Category</MudTd>
                         <MudTd DataLabel="Account">@GetAccountName(context.AccountId)</MudTd>
                         <MudTd DataLabel="Type">@context.Type</MudTd>
                         <MudTd DataLabel="Amount">@context.Amount.ToString("N2") @context.Currency</MudTd>
@@ -140,6 +145,7 @@
             HouseholdId = account.HouseholdId,
             AccountId = account.Id,
             Description = _newTransaction.Description.Trim(),
+            Category = string.IsNullOrWhiteSpace(_newTransaction.Category) ? "General" : _newTransaction.Category.Trim(),
             Amount = _newTransaction.Amount,
             Currency = account.Currency,
             Type = normalizedType,
@@ -154,6 +160,7 @@
         await DbContext.SaveChangesAsync();
 
         _newTransaction.Description = string.Empty;
+        _newTransaction.Category = "General";
         _newTransaction.Amount = 0m;
         _newTransaction.Type = "expense";
         _newTransaction.TransactionDate = DateTime.UtcNow;
@@ -171,6 +178,7 @@
     {
         public string AccountId { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public string Category { get; set; } = "General";
         public decimal Amount { get; set; }
         public string Type { get; set; } = "expense";
         public DateTime? TransactionDate { get; set; } = DateTime.UtcNow;
