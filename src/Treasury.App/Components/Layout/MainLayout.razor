@@ -1,0 +1,35 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="TreasuryTheme.Create()" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6">Treasury</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Text" Href="/">Dashboard</MudButton>
+        <MudButton Variant="Variant.Text" Href="/auth/login">Login</MudButton>
+        <MudButton Variant="Variant.Text" Href="/auth/register">Register</MudButton>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Temporary">
+        <MudNavMenu>
+            <MudNavLink Href="/">Dashboard</MudNavLink>
+            <MudNavLink Href="/auth/login">Login</MudNavLink>
+            <MudNavLink Href="/auth/register">Register</MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent Class="pa-4">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen;
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+}

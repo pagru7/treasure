@@ -1,0 +1,15 @@
+@page "/auth/login"
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="pa-6">
+    <MudCard>
+        <MudCardContent>
+            <MudText Typo="Typo.h4">Log in</MudText>
+            <MudTextField T="string" Label="Email" Variant="Variant.Outlined" Class="mt-4" />
+            <MudTextField T="string" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mt-4" />
+        </MudCardContent>
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true">Log in</MudButton>
+            <MudButton Variant="Variant.Text" Href="/auth/register" Class="mt-2">Create account</MudButton>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
