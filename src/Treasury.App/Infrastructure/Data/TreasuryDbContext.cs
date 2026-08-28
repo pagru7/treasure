@@ -12,4 +12,6 @@ public class TreasuryDbContext : IdentityDbContext<ApplicationUser>
     }
 
     public DbSet<Household> Households => Set<Household>();
+    public DbSet<Account> Accounts => Set<Account>();
+    public DbSet<Transaction> Transactions => Set<Transaction>();
 }

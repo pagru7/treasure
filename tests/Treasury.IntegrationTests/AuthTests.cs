@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Treasury.App.Infrastructure.Data;
@@ -31,5 +33,40 @@ public class AuthTests
 
         households.Should().HaveCount(1);
         households[0].Name.Should().Be("Default Household");
+    }
+
+    [Fact]
+    public async Task Anonymous_Request_To_Transactions_Page_Redirects_To_Login()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = app.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+
+        var response = await client.GetAsync("/transactions");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+    }
+
+    [Fact]
+    public async Task Register_Submit_Accepts_Json_Body()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = app.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+
+        var payload = new
+        {
+            Email = "json-register@example.com",
+            Password = "Password123",
+            ConfirmPassword = "Password123"
+        };
+
+        var response = await client.PostAsJsonAsync("/auth/register-submit", payload);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
     }
 }

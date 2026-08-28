@@ -1,0 +1,143 @@
+@page "/accounts"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">Accounts</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.Add" OnClick="ToggleCreateForm">Add account</MudButton>
+        </MudStack>
+
+        @if (_showCreateForm)
+        {
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudTextField Label="Account name" @bind-Value="_newAccount.Name" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="string" Label="Currency" @bind-Value="_newAccount.Currency">
+                            <MudSelectItem Value="@("PLN")">PLN</MudSelectItem>
+                            <MudSelectItem Value="@("EUR")">EUR</MudSelectItem>
+                            <MudSelectItem Value="@("USD")">USD</MudSelectItem>
+                            <MudSelectItem Value="@("GBP")">GBP</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="string" Label="Type" @bind-Value="_newAccount.AccountType">
+                            <MudSelectItem Value="@("cash-wallet")">Cash wallet</MudSelectItem>
+                            <MudSelectItem Value="@("bank-account")">Bank account</MudSelectItem>
+                            <MudSelectItem Value="@("savings")">Savings</MudSelectItem>
+                            <MudSelectItem Value="@("credit-card")">Credit card</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudNumericField Label="Initial balance" @bind-Value="_newAccount.InitialBalance" Min="0m" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
+                    <MudButton Variant="Variant.Text" OnClick="ToggleCreateForm">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="CreateAccountAsync">Save account</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
+
+        @if (_accounts.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No accounts yet. Create your first household account to get started.</MudAlert>
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var account in _accounts)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                            <MudText Typo="Typo.h6">@account.Name</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@account.AccountType</MudText>
+                            <MudDivider Class="my-3" />
+                            <MudText Typo="Typo.h5">@account.CurrentBalance.ToString("N2") @account.Currency</MudText>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private List<Treasury.App.Domain.Account> _accounts = new();
+    private bool _showCreateForm;
+    private readonly NewAccountForm _newAccount = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAccountsAsync();
+    }
+
+    private async Task LoadAccountsAsync()
+    {
+        _accounts = await DbContext.Accounts.OrderBy(x => x.Name).ToListAsync();
+    }
+
+    private void ToggleCreateForm()
+    {
+        _showCreateForm = !_showCreateForm;
+        if (!_showCreateForm)
+        {
+            _newAccount.Name = string.Empty;
+            _newAccount.Currency = "PLN";
+            _newAccount.AccountType = "cash-wallet";
+            _newAccount.InitialBalance = 0m;
+        }
+    }
+
+    private async Task CreateAccountAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newAccount.Name))
+        {
+            Snackbar.Add("Account name is required.", Severity.Warning);
+            return;
+        }
+
+        var householdId = await DbContext.Households
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        var account = new Treasury.App.Domain.Account
+        {
+            HouseholdId = householdId == Guid.Empty ? Guid.Parse("11111111-1111-1111-1111-111111111111") : householdId,
+            OwnerUserId = string.Empty,
+            Name = _newAccount.Name.Trim(),
+            Currency = string.IsNullOrWhiteSpace(_newAccount.Currency) ? "PLN" : _newAccount.Currency.Trim().ToUpperInvariant(),
+            AccountType = string.IsNullOrWhiteSpace(_newAccount.AccountType) ? "cash-wallet" : _newAccount.AccountType.Trim(),
+            CurrentBalance = _newAccount.InitialBalance,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        DbContext.Accounts.Add(account);
+        await DbContext.SaveChangesAsync();
+
+        _showCreateForm = false;
+        _newAccount.Name = string.Empty;
+        _newAccount.Currency = "PLN";
+        _newAccount.AccountType = "cash-wallet";
+        _newAccount.InitialBalance = 0m;
+
+        Snackbar.Add("Account created.", Severity.Success);
+        await LoadAccountsAsync();
+    }
+
+    private sealed class NewAccountForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Currency { get; set; } = "PLN";
+        public string AccountType { get; set; } = "cash-wallet";
+        public decimal InitialBalance { get; set; }
+    }
+}

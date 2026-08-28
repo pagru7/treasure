@@ -1,0 +1,178 @@
+@page "/transactions"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Transactions</MudText>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudSelect T="string" Label="Account" @bind-Value="_newTransaction.AccountId" Required="true">
+                        @foreach (var account in _accounts)
+                        {
+                            <MudSelectItem Value="@account.Id.ToString()">@account.Name (@account.Currency)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudTextField Label="Description" @bind-Value="_newTransaction.Description" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudNumericField Label="Amount" @bind-Value="_newTransaction.Amount" Required="true" Min="0.01m" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudSelect T="string" Label="Type" @bind-Value="_newTransaction.Type">
+                        <MudSelectItem Value="@("income")">Income</MudSelectItem>
+                        <MudSelectItem Value="@("expense")">Expense</MudSelectItem>
+                        <MudSelectItem Value="@("transfer")">Transfer</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudDatePicker Label="Date" @bind-Date="_newTransaction.TransactionDate" />
+                </MudItem>
+            </MudGrid>
+
+            <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="CreateTransactionAsync">Add transaction</MudButton>
+            </MudStack>
+        </MudPaper>
+
+        @if (_transactions.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No transactions yet. Add your first household transaction to start tracking cash flow.</MudAlert>
+        }
+        else
+        {
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudTable T="Treasury.App.Domain.Transaction" Items="_transactions" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Description</MudTh>
+                        <MudTh>Account</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Amount</MudTh>
+                        <MudTh>Date</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Description">@context.Description</MudTd>
+                        <MudTd DataLabel="Account">@GetAccountName(context.AccountId)</MudTd>
+                        <MudTd DataLabel="Type">@context.Type</MudTd>
+                        <MudTd DataLabel="Amount">@context.Amount.ToString("N2") @context.Currency</MudTd>
+                        <MudTd DataLabel="Date">@context.TransactionDate.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<Treasury.App.Domain.Transaction> _transactions = new();
+    private readonly List<Treasury.App.Domain.Account> _accounts = new();
+
+    private readonly NewTransactionForm _newTransaction = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _accounts.Clear();
+        _accounts.AddRange(await DbContext.Accounts.OrderBy(x => x.Name).ToListAsync());
+
+        _transactions.Clear();
+        _transactions.AddRange(await DbContext.Transactions.OrderByDescending(x => x.TransactionDate).ToListAsync());
+
+        if (_accounts.Count > 0 && string.IsNullOrWhiteSpace(_newTransaction.AccountId))
+        {
+            _newTransaction.AccountId = _accounts[0].Id.ToString();
+        }
+    }
+
+    private async Task CreateTransactionAsync()
+    {
+        if (_accounts.Count == 0)
+        {
+            Snackbar.Add("Create an account before adding transactions.", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newTransaction.Description) || string.IsNullOrWhiteSpace(_newTransaction.AccountId) || _newTransaction.Amount <= 0m)
+        {
+            Snackbar.Add("Description, account and a positive amount are required.", Severity.Warning);
+            return;
+        }
+
+        if (!Guid.TryParse(_newTransaction.AccountId, out var accountId))
+        {
+            Snackbar.Add("Please select a valid account.", Severity.Warning);
+            return;
+        }
+
+        var account = await DbContext.Accounts.SingleOrDefaultAsync(x => x.Id == accountId);
+        if (account is null)
+        {
+            Snackbar.Add("Selected account could not be found.", Severity.Error);
+            return;
+        }
+
+        var normalizedType = (_newTransaction.Type ?? "expense").Trim().ToLowerInvariant();
+        var delta = _newTransaction.Amount;
+        if (normalizedType == "expense")
+        {
+            delta = -Math.Abs(_newTransaction.Amount);
+        }
+        else if (normalizedType == "income")
+        {
+            delta = Math.Abs(_newTransaction.Amount);
+        }
+        else if (normalizedType == "transfer")
+        {
+            delta = _newTransaction.Amount;
+        }
+
+        var transaction = new Treasury.App.Domain.Transaction
+        {
+            HouseholdId = account.HouseholdId,
+            AccountId = account.Id,
+            Description = _newTransaction.Description.Trim(),
+            Amount = _newTransaction.Amount,
+            Currency = account.Currency,
+            Type = normalizedType,
+            TransactionDate = _newTransaction.TransactionDate ?? DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        DbContext.Transactions.Add(transaction);
+        account.CurrentBalance += delta;
+        account.UpdatedAt = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+
+        _newTransaction.Description = string.Empty;
+        _newTransaction.Amount = 0m;
+        _newTransaction.Type = "expense";
+        _newTransaction.TransactionDate = DateTime.UtcNow;
+
+        Snackbar.Add("Transaction saved.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private string GetAccountName(Guid accountId)
+    {
+        return _accounts.FirstOrDefault(x => x.Id == accountId)?.Name ?? "Unknown account";
+    }
+
+    private sealed class NewTransactionForm
+    {
+        public string AccountId { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string Type { get; set; } = "expense";
+        public DateTime? TransactionDate { get; set; } = DateTime.UtcNow;
+    }
+}

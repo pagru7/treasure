@@ -1,16 +1,51 @@
 @page "/auth/register"
+@inject NavigationManager Navigation
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="pa-6">
-    <MudCard>
-        <MudCardContent>
-            <MudText Typo="Typo.h4">Create account</MudText>
-            <MudTextField T="string" Label="Email" Variant="Variant.Outlined" Class="mt-4" />
-            <MudTextField T="string" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mt-4" />
-            <MudTextField T="string" Label="Confirm password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mt-4" />
-        </MudCardContent>
-        <MudCardActions>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true">Register</MudButton>
-            <MudButton Variant="Variant.Text" Href="/auth/login" Class="mt-2">Already have an account?</MudButton>
-        </MudCardActions>
-    </MudCard>
+    <MudPaper Class="pa-6 rounded-xl" Elevation="3">
+        <MudStack Spacing="3">
+            <div>
+                <MudText Typo="Typo.h4">Create account</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Set up a household account for your family budget.</MudText>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true">@_errorMessage</MudAlert>
+            }
+
+            <form method="post" action="/auth/register-submit">
+                <MudStack Spacing="2">
+                    <label>
+                        <span class="mud-typography mud-typography-body2 mud-secondary-text">Email</span>
+                        <input class="field-input mt-2" type="email" name="Email" required />
+                    </label>
+                    <label>
+                        <span class="mud-typography mud-typography-body2 mud-secondary-text">Password</span>
+                        <input class="field-input mt-2" type="password" name="Password" required />
+                    </label>
+                    <label>
+                        <span class="mud-typography mud-typography-body2 mud-secondary-text">Confirm password</span>
+                        <input class="field-input mt-2" type="password" name="ConfirmPassword" required />
+                    </label>
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true">Register</MudButton>
+                </MudStack>
+            </form>
+
+            <MudButton Variant="Variant.Text" Href="/auth/login" FullWidth="true">Already have an account?</MudButton>
+        </MudStack>
+    </MudPaper>
 </MudContainer>
+
+@code {
+    private string? _errorMessage;
+
+    protected override void OnParametersSet()
+    {
+        var query = new Uri(Navigation.Uri).Query;
+        if (!string.IsNullOrWhiteSpace(query) && QueryHelpers.ParseQuery(query).TryGetValue("error", out var value))
+        {
+            _errorMessage = value.ToString();
+        }
+    }
+}
