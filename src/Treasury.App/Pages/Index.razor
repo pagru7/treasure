@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject TreasuryDbContext DbContext
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
     <MudStack Row="false" Spacing="3">
@@ -12,25 +13,25 @@
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Class="pa-4 rounded-xl" Elevation="2">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">PLN total</MudText>
-                    <MudText Typo="Typo.h5" Class="mt-2">12,480.58 zł</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2">@FormatCurrency(_summary.TotalPln, "PLN")</MudText>
                 </MudPaper>
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Class="pa-4 rounded-xl" Elevation="2">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">EUR total</MudText>
-                    <MudText Typo="Typo.h5" Class="mt-2">2,840.00 €</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2">@FormatCurrency(_totalsByCurrency.GetValueOrDefault("EUR", 0m), "EUR")</MudText>
                 </MudPaper>
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Class="pa-4 rounded-xl" Elevation="2">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Cash flow</MudText>
-                    <MudText Typo="Typo.h5" Class="mt-2">+1,280.40 zł</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2">@FormatSigned(_recentCashFlow, "PLN")</MudText>
                 </MudPaper>
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Class="pa-4 rounded-xl" Elevation="2">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Bills due</MudText>
-                    <MudText Typo="Typo.h5" Class="mt-2">3 upcoming</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2">@_upcomingCount upcoming</MudText>
                 </MudPaper>
             </MudItem>
         </MudGrid>
@@ -40,13 +41,13 @@
                 <MudPaper Class="pa-4 rounded-xl" Elevation="2">
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                         <MudText Typo="Typo.h6">Recent transactions</MudText>
-                        <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Tertiary">Add transaction</MudButton>
+                        <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Tertiary" Href="/transactions">Add transaction</MudButton>
                     </MudStack>
                     <MudList T="string" Class="mt-3">
-                        <MudListItem>Salary deposit · +4,200.00 PLN</MudListItem>
-                        <MudListItem>Groceries · -480.32 PLN</MudListItem>
-                        <MudListItem>Home savings transfer · +1,000.00 PLN</MudListItem>
-                        <MudListItem>EUR account transfer · +350.00 EUR</MudListItem>
+                        @foreach (var item in _recentTransactions)
+                        {
+                            <MudListItem>@item.Description · @FormatSigned(item.Amount, item.Currency)</MudListItem>
+                        }
                     </MudList>
                 </MudPaper>
             </MudItem>
@@ -54,9 +55,9 @@
                 <MudPaper Class="pa-4 rounded-xl" Elevation="2">
                     <MudText Typo="Typo.h6">Quick actions</MudText>
                     <MudStack Class="mt-3" Spacing="2">
-                        <MudButton Variant="Variant.Filled" Color="Color.Tertiary">Create account</MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary">Add valuation</MudButton>
-                        <MudButton Variant="Variant.Text" Color="Color.Tertiary">Update rates</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Tertiary" Href="/accounts">Create account</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Href="/rates">View rates</MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Tertiary" Href="/transactions">Update rates</MudButton>
                     </MudStack>
                 </MudPaper>
             </MudItem>
@@ -65,12 +66,66 @@
 </MudContainer>
 
 @code {
+    private Treasury.App.Application.Dashboard.DashboardSummaryResponse _summary = new();
+    private readonly Dictionary<string, decimal> _totalsByCurrency = new();
+    private readonly List<Treasury.App.Domain.Transaction> _recentTransactions = new();
+    private decimal _recentCashFlow;
+    private int _upcomingCount;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (authState.User.Identity?.IsAuthenticated != true)
         {
             Navigation.NavigateTo("/auth/login", forceLoad: true);
+            return;
         }
+
+        var householdId = await DbContext.Households
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        var accounts = await DbContext.Accounts
+            .Where(x => x.HouseholdId == householdId)
+            .ToListAsync();
+
+        _totalsByCurrency.Clear();
+        foreach (var account in accounts)
+        {
+            _totalsByCurrency[account.Currency] = _totalsByCurrency.GetValueOrDefault(account.Currency, 0m) + account.CurrentBalance;
+        }
+
+        var rates = new Dictionary<string, decimal>
+        {
+            ["EUR"] = 4.6m,
+            ["USD"] = 3.9m,
+            ["GBP"] = 5.3m
+        };
+
+        _summary = new DashboardSummaryService().BuildSummary(
+            accounts.Select(x => new AccountValueItem(x.Currency, x.CurrentBalance)),
+            rates);
+
+        _recentTransactions.Clear();
+        _recentTransactions.AddRange(await DbContext.Transactions
+            .Where(x => x.HouseholdId == householdId)
+            .OrderByDescending(x => x.TransactionDate)
+            .Take(5)
+            .ToListAsync());
+
+        _recentCashFlow = _recentTransactions
+            .Where(x => x.Currency == "PLN")
+            .Sum(x => x.Type == "expense" ? -x.Amount : x.Type == "income" ? x.Amount : 0m);
+
+        _upcomingCount = Math.Max(0, 3 - _recentTransactions.Count);
+    }
+
+    private static string FormatCurrency(decimal value, string currency) => $"{value:N2} {currency}";
+
+    private static string FormatSigned(decimal value, string currency)
+    {
+        var prefix = value >= 0 ? "+" : "-";
+        return $"{prefix}{Math.Abs(value):N2} {currency}";
     }
 }

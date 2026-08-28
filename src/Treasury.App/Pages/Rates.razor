@@ -1,0 +1,35 @@
+@page "/rates"
+@attribute [Authorize]
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Exchange rates</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">Reference values for the family household budget.</MudText>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudTable T="RateRow" Items="_rates" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Currency</MudTh>
+                    <MudTh>Rate (PLN)</MudTh>
+                    <MudTh>Last updated</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Currency">@context.Currency</MudTd>
+                    <MudTd DataLabel="Rate (PLN)">@context.Rate.ToString("N2")</MudTd>
+                    <MudTd DataLabel="Last updated">@context.UpdatedAt.ToString("yyyy-MM-dd")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<RateRow> _rates =
+    [
+        new("EUR", 4.60m, DateTime.UtcNow.AddDays(-1)),
+        new("USD", 3.90m, DateTime.UtcNow.AddDays(-2)),
+        new("GBP", 5.30m, DateTime.UtcNow.AddDays(-3))
+    ];
+
+    private sealed record RateRow(string Currency, decimal Rate, DateTime UpdatedAt);
+}
