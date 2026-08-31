@@ -9,4 +9,5 @@ public sealed class CreateTransactionRequest
     public string Currency { get; set; } = "PLN";
     public string Type { get; set; } = "expense";
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
+    public List<Guid> TagIds { get; set; } = new();
 }

@@ -7,6 +7,7 @@ using Treasury.App.Components;
 using Treasury.App.Contracts.Accounts;
 using Treasury.App.Contracts.Bills;
 using Treasury.App.Contracts.Budgets;
+using Treasury.App.Contracts.Tags;
 using Treasury.App.Contracts.Transactions;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Auth;
@@ -192,6 +193,74 @@ app.MapGet("/api/dashboard/summary", async (TreasuryDbContext db) =>
     var summary = new DashboardSummaryService().BuildSummary(accounts, rates);
     return Results.Ok(summary);
 });
+
+app.MapGet("/api/tags", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var tags = await db.Tags
+        .Where(x => x.HouseholdId == user.HouseholdId)
+        .OrderBy(x => x.Name)
+        .Select(x => new
+        {
+            x.Id,
+            x.Name,
+            x.Color
+        })
+        .ToListAsync();
+
+    return Results.Ok(tags);
+}).RequireAuthorization();
+
+app.MapPost("/api/tags", async (HttpContext httpContext, CreateTagRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var name = request.Name?.Trim();
+    if (string.IsNullOrWhiteSpace(name))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["name"] = ["Tag name is required."]
+        });
+    }
+
+    var exists = await db.Tags.AnyAsync(x => x.HouseholdId == user.HouseholdId && x.Name.ToLower() == name.ToLower());
+    if (exists)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["name"] = ["This tag already exists for this household."]
+        });
+    }
+
+    var tag = new Tag
+    {
+        HouseholdId = user.HouseholdId,
+        Name = name,
+        Color = string.IsNullOrWhiteSpace(request.Color) ? "#3B82F6" : request.Color.Trim(),
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    db.Tags.Add(tag);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/tags/{tag.Id}", new
+    {
+        tag.Id,
+        tag.Name,
+        tag.Color
+    });
+}).RequireAuthorization();
 
 app.MapGet("/api/budgets", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
 {
@@ -417,7 +486,13 @@ app.MapGet("/api/transactions", async (HttpContext httpContext, TreasuryDbContex
             x.Amount,
             x.Currency,
             x.Type,
-            x.TransactionDate
+            x.TransactionDate,
+            Tags = x.TransactionTags.Select(tt => new
+            {
+                tt.Tag.Id,
+                tt.Tag.Name,
+                tt.Tag.Color
+            }).ToList()
         })
         .ToListAsync();
 
@@ -474,6 +549,20 @@ app.MapPost("/api/transactions", async (HttpContext httpContext, CreateTransacti
         TransactionDate = request.TransactionDate == default ? DateTime.UtcNow : request.TransactionDate,
     };
 
+    var validTagIds = await db.Tags
+        .Where(x => x.HouseholdId == user.HouseholdId && request.TagIds.Contains(x.Id))
+        .Select(x => x.Id)
+        .ToListAsync();
+
+    foreach (var tagId in validTagIds)
+    {
+        transaction.TransactionTags.Add(new TransactionTag
+        {
+            Transaction = transaction,
+            TagId = tagId
+        });
+    }
+
     db.Transactions.Add(transaction);
     account.CurrentBalance += delta;
     account.UpdatedAt = DateTime.UtcNow;
@@ -488,7 +577,8 @@ app.MapPost("/api/transactions", async (HttpContext httpContext, CreateTransacti
         transaction.Amount,
         transaction.Currency,
         transaction.Type,
-        transaction.TransactionDate
+        transaction.TransactionDate,
+        Tags = validTagIds
     });
 }).RequireAuthorization();
 

@@ -108,6 +108,16 @@ public static class InitialSeed
             }
         }
 
+        if (!await db.Tags.AnyAsync(cancellationToken))
+        {
+            var householdId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            db.Tags.AddRange(
+                new Tag { HouseholdId = householdId, Name = "Travel", Color = "#14B8A6" },
+                new Tag { HouseholdId = householdId, Name = "Groceries", Color = "#84CC16" },
+                new Tag { HouseholdId = householdId, Name = "Home", Color = "#F59E0B" },
+                new Tag { HouseholdId = householdId, Name = "Family", Color = "#8B5CF6" });
+        }
+
         if (!await db.BudgetCategories.AnyAsync(cancellationToken))
         {
             var householdId = Guid.Parse("11111111-1111-1111-1111-111111111111");

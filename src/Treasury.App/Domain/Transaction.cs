@@ -13,4 +13,6 @@ public class Transaction
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<TransactionTag> TransactionTags { get; set; } = new List<TransactionTag>();
 }

@@ -38,6 +38,26 @@
                 </MudItem>
             </MudGrid>
 
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.subtitle2">Tags</MudText>
+            @if (_tags.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mt-2">No tags yet. Add one from the Tags page.</MudText>
+            }
+            else
+            {
+                <MudStack Row="true" Class="mt-2">
+                    @foreach (var tag in _tags)
+                    {
+                        <MudCheckBox T="bool"
+                                     Value="@_selectedTagIds.Contains(tag.Id)"
+                                     ValueChanged="@(value => ToggleTag(tag.Id, value))"
+                                     Label="@tag.Name" />
+                    }
+                </MudStack>
+            }
+
             <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
                 <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="CreateTransactionAsync">Add transaction</MudButton>
             </MudStack>
@@ -54,6 +74,7 @@
                     <HeaderContent>
                         <MudTh>Description</MudTh>
                         <MudTh>Category</MudTh>
+                        <MudTh>Tags</MudTh>
                         <MudTh>Account</MudTh>
                         <MudTh>Type</MudTh>
                         <MudTh>Amount</MudTh>
@@ -62,6 +83,19 @@
                     <RowTemplate>
                         <MudTd DataLabel="Description">@context.Description</MudTd>
                         <MudTd DataLabel="Category">@context.Category</MudTd>
+                        <MudTd DataLabel="Tags">
+                            @if (_transactionTags.TryGetValue(context.Id, out var tags) && tags.Count > 0)
+                            {
+                                foreach (var tag in tags)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Style="@($"background:{tag.Color}; color:white;")">@tag.Name</MudChip>
+                                }
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption">No tags</MudText>
+                            }
+                        </MudTd>
                         <MudTd DataLabel="Account">@GetAccountName(context.AccountId)</MudTd>
                         <MudTd DataLabel="Type">@context.Type</MudTd>
                         <MudTd DataLabel="Amount">@context.Amount.ToString("N2") @context.Currency</MudTd>
@@ -76,6 +110,9 @@
 @code {
     private readonly List<Treasury.App.Domain.Transaction> _transactions = new();
     private readonly List<Treasury.App.Domain.Account> _accounts = new();
+    private readonly List<Treasury.App.Domain.Tag> _tags = new();
+    private readonly Dictionary<Guid, List<Treasury.App.Domain.Tag>> _transactionTags = new();
+    private readonly HashSet<Guid> _selectedTagIds = new();
 
     private readonly NewTransactionForm _newTransaction = new();
 
@@ -89,13 +126,38 @@
         _accounts.Clear();
         _accounts.AddRange(await DbContext.Accounts.OrderBy(x => x.Name).ToListAsync());
 
+        _tags.Clear();
+        _tags.AddRange(await DbContext.Tags.OrderBy(x => x.Name).ToListAsync());
+
         _transactions.Clear();
         _transactions.AddRange(await DbContext.Transactions.OrderByDescending(x => x.TransactionDate).ToListAsync());
+
+        _transactionTags.Clear();
+        var tagLinks = await DbContext.TransactionTags
+            .Include(x => x.Tag)
+            .Where(x => _transactions.Select(t => t.Id).Contains(x.TransactionId))
+            .ToListAsync();
+
+        foreach (var group in tagLinks.GroupBy(x => x.TransactionId))
+        {
+            _transactionTags[group.Key] = group.Select(x => x.Tag).ToList();
+        }
 
         if (_accounts.Count > 0 && string.IsNullOrWhiteSpace(_newTransaction.AccountId))
         {
             _newTransaction.AccountId = _accounts[0].Id.ToString();
         }
+    }
+
+    private void ToggleTag(Guid tagId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            _selectedTagIds.Add(tagId);
+            return;
+        }
+
+        _selectedTagIds.Remove(tagId);
     }
 
     private async Task CreateTransactionAsync()
@@ -154,6 +216,22 @@
             UpdatedAt = DateTime.UtcNow
         };
 
+        foreach (var tagId in _selectedTagIds)
+        {
+            var tag = _tags.FirstOrDefault(x => x.Id == tagId);
+            if (tag is null)
+            {
+                continue;
+            }
+
+            transaction.TransactionTags.Add(new Treasury.App.Domain.TransactionTag
+            {
+                Transaction = transaction,
+                TagId = tag.Id,
+                Tag = tag
+            });
+        }
+
         DbContext.Transactions.Add(transaction);
         account.CurrentBalance += delta;
         account.UpdatedAt = DateTime.UtcNow;
@@ -164,6 +242,7 @@
         _newTransaction.Amount = 0m;
         _newTransaction.Type = "expense";
         _newTransaction.TransactionDate = DateTime.UtcNow;
+        _selectedTagIds.Clear();
 
         Snackbar.Add("Transaction saved.", Severity.Success);
         await LoadAsync();
