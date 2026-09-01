@@ -1,6 +1,8 @@
 @page "/tags"
 @attribute [Authorize]
 @inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ISnackbar Snackbar
 
 <MudContainer MaxWidth="MaxWidth.Medium" Class="pa-4 pa-sm-6">
@@ -55,10 +57,16 @@
         await LoadAsync();
     }
 
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(authState.User);
+    }
+
     private async Task LoadAsync()
     {
-        var householdId = (await DbContext.Households.FirstOrDefaultAsync())?.Id ?? Guid.Empty;
-        if (householdId == Guid.Empty)
+        var user = await GetCurrentUserAsync();
+        if (user is null)
         {
             _tags.Clear();
             return;
@@ -66,7 +74,7 @@
 
         _tags.Clear();
         _tags.AddRange(await DbContext.Tags
-            .Where(x => x.HouseholdId == householdId)
+            .Where(x => x.HouseholdId == user.HouseholdId)
             .OrderBy(x => x.Name)
             .ToListAsync());
     }
@@ -80,14 +88,14 @@
             return;
         }
 
-        var householdId = (await DbContext.Households.FirstOrDefaultAsync())?.Id ?? Guid.Empty;
-        if (householdId == Guid.Empty)
+        var user = await GetCurrentUserAsync();
+        if (user is null)
         {
-            Snackbar.Add("No household found for the current user.", Severity.Error);
+            Snackbar.Add("You must be signed in to manage tags.", Severity.Error);
             return;
         }
 
-        var exists = await DbContext.Tags.AnyAsync(x => x.HouseholdId == householdId && x.Name.ToLower() == name.ToLower());
+        var exists = await DbContext.Tags.AnyAsync(x => x.HouseholdId == user.HouseholdId && x.Name.ToLower() == name.ToLower());
         if (exists)
         {
             Snackbar.Add("This tag already exists.", Severity.Warning);
@@ -96,7 +104,7 @@
 
         var tag = new Treasury.App.Domain.Tag
         {
-            HouseholdId = householdId,
+            HouseholdId = user.HouseholdId,
             Name = name,
             Color = string.IsNullOrWhiteSpace(_newTagColor) ? "#3B82F6" : _newTagColor.Trim(),
             CreatedAt = DateTime.UtcNow,
