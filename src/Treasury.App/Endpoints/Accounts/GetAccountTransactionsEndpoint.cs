@@ -1,0 +1,60 @@
+using FastEndpoints;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Treasury.App.Domain;
+using Treasury.App.Infrastructure.Data;
+
+namespace Treasury.App.Endpoints.Accounts;
+
+public sealed class GetAccountTransactionsRequest
+{
+    public Guid Id { get; set; }
+}
+
+public sealed class GetAccountTransactionsEndpoint(TreasuryDbContext db, UserManager<ApplicationUser> userManager)
+    : Endpoint<GetAccountTransactionsRequest>
+{
+    public override void Configure()
+    {
+        Get("/api/accounts/{id:guid}/transactions");
+        Policies(global::Treasury.App.Infrastructure.Auth.Policies.SharedReadOnly);
+    }
+
+    public override async Task HandleAsync(GetAccountTransactionsRequest request, CancellationToken ct)
+    {
+        var user = await userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            await SendUnauthorizedAsync(ct);
+            return;
+        }
+
+        var canAccess = await db.Accounts.AnyAsync(x =>
+            x.Id == request.Id
+            && x.HouseholdId == user.HouseholdId
+            && (x.OwnerUserId == user.Id || x.OwnerUserId == "seed" || x.VisibilityRules.Any(v => v.ViewerUserId == user.Id)), ct);
+        if (!canAccess)
+        {
+            await SendNotFoundAsync(ct);
+            return;
+        }
+
+        var transactions = await db.Transactions
+            .Where(x => x.HouseholdId == user.HouseholdId && x.AccountId == request.Id)
+            .OrderByDescending(x => x.TransactionDate)
+            .Select(x => new
+            {
+                x.Id,
+                x.AccountId,
+                x.Description,
+                x.Category,
+                x.Amount,
+                x.Currency,
+                x.Type,
+                x.TransactionDate
+            })
+            .ToListAsync(ct);
+
+        await SendOkAsync(transactions, ct);
+    }
+}
