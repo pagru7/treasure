@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FastEndpoints;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -88,6 +89,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddHealthChecks();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddFastEndpoints();
 builder.Services.AddMudServices();
 
 var app = builder.Build();
@@ -406,83 +408,6 @@ app.MapPost("/api/bills", async (HttpContext httpContext, CreateBillRequest requ
     });
 }).RequireAuthorization();
 
-app.MapPost("/api/rates", async (HttpContext httpContext, UpsertRateRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
-{
-    var user = await userManager.GetUserAsync(httpContext.User);
-    if (user is null)
-    {
-        return Results.Unauthorized();
-    }
-
-    var fromCurrency = request.FromCurrency?.Trim().ToUpperInvariant();
-    var toCurrency = request.ToCurrency?.Trim().ToUpperInvariant();
-    if (string.IsNullOrWhiteSpace(fromCurrency) || string.IsNullOrWhiteSpace(toCurrency) || request.Rate <= 0m || fromCurrency == toCurrency)
-    {
-        return Results.ValidationProblem(new Dictionary<string, string[]>
-        {
-            ["fromCurrency"] = ["From currency is required."],
-            ["toCurrency"] = ["To currency is required and must differ from fromCurrency."],
-            ["rate"] = ["Rate must be greater than zero."]
-        });
-    }
-
-    var existing = await db.CurrencyRates.SingleOrDefaultAsync(x =>
-        x.HouseholdId == user.HouseholdId
-        && x.FromCurrency == fromCurrency
-        && x.ToCurrency == toCurrency);
-
-    if (existing is null)
-    {
-        db.CurrencyRates.Add(new CurrencyRate
-        {
-            HouseholdId = user.HouseholdId,
-            FromCurrency = fromCurrency,
-            ToCurrency = toCurrency,
-            Rate = request.Rate,
-            EffectiveAt = request.EffectiveAt == default ? DateTime.UtcNow : request.EffectiveAt,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        });
-    }
-    else
-    {
-        existing.Rate = request.Rate;
-        existing.EffectiveAt = request.EffectiveAt == default ? DateTime.UtcNow : request.EffectiveAt;
-        existing.UpdatedAt = DateTime.UtcNow;
-    }
-
-    await db.SaveChangesAsync();
-    return Results.Ok();
-}).RequireAuthorization(Policies.OwnerOnly);
-
-app.MapGet("/api/rates/latest", async (HttpContext httpContext, string from, string to, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
-{
-    var user = await userManager.GetUserAsync(httpContext.User);
-    if (user is null)
-    {
-        return Results.Unauthorized();
-    }
-
-    var fromCurrency = from.Trim().ToUpperInvariant();
-    var toCurrency = to.Trim().ToUpperInvariant();
-    var rate = await db.CurrencyRates.SingleOrDefaultAsync(x =>
-        x.HouseholdId == user.HouseholdId
-        && x.FromCurrency == fromCurrency
-        && x.ToCurrency == toCurrency);
-    if (rate is null)
-    {
-        return Results.NotFound();
-    }
-
-    return Results.Ok(new
-    {
-        rate.FromCurrency,
-        rate.ToCurrency,
-        rate.Rate,
-        rate.EffectiveAt
-    });
-}).RequireAuthorization();
-
 app.MapPost("/api/valuations/bullion", async (HttpContext httpContext, UpdateBullionValueRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
 {
     var user = await userManager.GetUserAsync(httpContext.User);
@@ -581,75 +506,6 @@ app.MapPost("/api/valuations/coin", async (HttpContext httpContext, UpdateCoinVa
         valuation.CurrentTotalValue,
         valuation.Currency,
         valuation.ValuationDate
-    });
-}).RequireAuthorization(Policies.OwnerOnly);
-
-app.MapGet("/api/account-types", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
-{
-    var user = await userManager.GetUserAsync(httpContext.User);
-    if (user is null)
-    {
-        return Results.Unauthorized();
-    }
-
-    var accountTypes = await db.AccountTypes
-        .Where(x => x.HouseholdId == user.HouseholdId)
-        .OrderBy(x => x.Name)
-        .Select(x => new
-        {
-            x.Id,
-            x.Name,
-            x.Description
-        })
-        .ToListAsync();
-
-    return Results.Ok(accountTypes);
-}).RequireAuthorization();
-
-app.MapPost("/api/account-types", async (HttpContext httpContext, CreateAccountTypeRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
-{
-    var user = await userManager.GetUserAsync(httpContext.User);
-    if (user is null)
-    {
-        return Results.Unauthorized();
-    }
-
-    var name = request.Name?.Trim();
-    if (string.IsNullOrWhiteSpace(name))
-    {
-        return Results.ValidationProblem(new Dictionary<string, string[]>
-        {
-            ["name"] = ["Account type name is required."]
-        });
-    }
-
-    var normalizedName = name.ToLowerInvariant();
-    var exists = await db.AccountTypes.AnyAsync(x => x.HouseholdId == user.HouseholdId && x.Name.ToLower() == normalizedName);
-    if (exists)
-    {
-        return Results.ValidationProblem(new Dictionary<string, string[]>
-        {
-            ["name"] = ["This account type already exists for this household."]
-        });
-    }
-
-    var accountType = new AccountTypeDefinition
-    {
-        HouseholdId = user.HouseholdId,
-        Name = normalizedName,
-        Description = request.Description?.Trim() ?? string.Empty,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow
-    };
-
-    db.AccountTypes.Add(accountType);
-    await db.SaveChangesAsync();
-
-    return Results.Created($"/api/account-types/{accountType.Id}", new
-    {
-        accountType.Id,
-        accountType.Name,
-        accountType.Description
     });
 }).RequireAuthorization(Policies.OwnerOnly);
 
@@ -1134,6 +990,7 @@ app.Use(async (context, next) =>
 });
 
 app.UseAntiforgery();
+app.UseFastEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
