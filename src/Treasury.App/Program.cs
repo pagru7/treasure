@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
@@ -83,6 +84,7 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddHealthChecks();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddMudServices();
 
 var app = builder.Build();
