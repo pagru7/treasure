@@ -1151,10 +1151,9 @@ async Task<AuthRequestPayload> ReadAuthPayloadAsync(HttpRequest request)
             form["ConfirmPassword"].ToString());
     }
 
-    if (request.ContentLength is > 0 && request.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true)
+    if (request.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true)
     {
         var raw = await new StreamReader(request.Body, leaveOpen: true).ReadToEndAsync();
-        request.Body.Position = 0;
 
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -1175,9 +1174,26 @@ async Task<AuthRequestPayload> ReadAuthPayloadAsync(HttpRequest request)
 
 string? GetStringProperty(JsonElement root, string propertyName)
 {
-    if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty(propertyName, out var property))
+    if (root.ValueKind != JsonValueKind.Object)
     {
         return null;
+    }
+
+    if (!root.TryGetProperty(propertyName, out var property))
+    {
+        foreach (var candidate in root.EnumerateObject())
+        {
+            if (string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                property = candidate.Value;
+                break;
+            }
+        }
+
+        if (property.ValueKind == JsonValueKind.Undefined)
+        {
+            return null;
+        }
     }
 
     return property.ValueKind == JsonValueKind.String ? property.GetString() : property.ToString();
