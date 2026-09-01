@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Treasury.App.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Treasury.App.Infrastructure.Data;
 namespace Treasury.App.Infrastructure.Migrations
 {
     [DbContext(typeof(TreasuryDbContext))]
-    partial class TreasuryDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260901103225_AddAccountTypesAndVisibilityRules")]
+    partial class AddAccountTypesAndVisibilityRules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -294,55 +297,6 @@ namespace Treasury.App.Infrastructure.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
-            modelBuilder.Entity("Treasury.App.Domain.AssetValuation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AssetName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("CurrentTotalValue")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("CurrentUnitValue")
-                        .HasColumnType("numeric");
-
-                    b.Property<Guid>("HouseholdId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("Purity")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ValuationDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("Weight")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AssetValuations");
-                });
-
             modelBuilder.Entity("Treasury.App.Domain.Bill", b =>
                 {
                     b.Property<Guid>("Id")
@@ -421,43 +375,6 @@ namespace Treasury.App.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("BudgetCategories");
-                });
-
-            modelBuilder.Entity("Treasury.App.Domain.CurrencyRate", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("EffectiveAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FromCurrency")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("HouseholdId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Rate")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("ToCurrency")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HouseholdId", "FromCurrency", "ToCurrency")
-                        .IsUnique();
-
-                    b.ToTable("CurrencyRates");
                 });
 
             modelBuilder.Entity("Treasury.App.Domain.Household", b =>
@@ -567,43 +484,6 @@ namespace Treasury.App.Infrastructure.Migrations
                     b.HasIndex("TagId");
 
                     b.ToTable("TransactionTags");
-                });
-
-            modelBuilder.Entity("Treasury.App.Domain.Transfer", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("FromAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("HouseholdId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ToAccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("TransferDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Transfers");
                 });
 
             modelBuilder.Entity("Treasury.App.Domain.VisibilityRule", b =>

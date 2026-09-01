@@ -11,4 +11,6 @@ public class Account
     public decimal CurrentBalance { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<VisibilityRule> VisibilityRules { get; set; } = new List<VisibilityRule>();
 }

@@ -29,6 +29,18 @@ public class TreasuryDbContext : IdentityDbContext<ApplicationUser>
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<CurrencyRate>()
+            .HasIndex(x => new { x.HouseholdId, x.FromCurrency, x.ToCurrency })
+            .IsUnique();
+
+        modelBuilder.Entity<VisibilityRule>()
+            .HasKey(x => new { x.AccountId, x.ViewerUserId });
+
+        modelBuilder.Entity<VisibilityRule>()
+            .HasOne(x => x.Account)
+            .WithMany(x => x.VisibilityRules)
+            .HasForeignKey(x => x.AccountId);
+
         modelBuilder.Entity<TransactionTag>()
             .HasKey(x => new { x.TransactionId, x.TagId });
 
@@ -44,7 +56,12 @@ public class TreasuryDbContext : IdentityDbContext<ApplicationUser>
     }
 
     public DbSet<Household> Households => Set<Household>();
+    public DbSet<AccountTypeDefinition> AccountTypes => Set<AccountTypeDefinition>();
     public DbSet<Account> Accounts => Set<Account>();
+    public DbSet<VisibilityRule> VisibilityRules => Set<VisibilityRule>();
+    public DbSet<Transfer> Transfers => Set<Transfer>();
+    public DbSet<CurrencyRate> CurrencyRates => Set<CurrencyRate>();
+    public DbSet<AssetValuation> AssetValuations => Set<AssetValuation>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TransactionTag> TransactionTags => Set<TransactionTag>();

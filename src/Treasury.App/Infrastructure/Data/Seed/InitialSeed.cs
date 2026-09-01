@@ -16,6 +16,44 @@ public static class InitialSeed
             });
         }
 
+        if (!await db.AccountTypes.AnyAsync(cancellationToken))
+        {
+            var householdId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            db.AccountTypes.AddRange(
+                new AccountTypeDefinition
+                {
+                    HouseholdId = householdId,
+                    Name = "cash-wallet",
+                    Description = "Cash wallet for daily spending",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new AccountTypeDefinition
+                {
+                    HouseholdId = householdId,
+                    Name = "bank-account",
+                    Description = "Current or checking bank account",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new AccountTypeDefinition
+                {
+                    HouseholdId = householdId,
+                    Name = "savings",
+                    Description = "Savings account",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new AccountTypeDefinition
+                {
+                    HouseholdId = householdId,
+                    Name = "credit-card",
+                    Description = "Credit card account",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+        }
+
         if (!await db.Accounts.AnyAsync(cancellationToken))
         {
             var householdId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -106,6 +144,42 @@ public static class InitialSeed
                         UpdatedAt = DateTime.UtcNow
                     });
             }
+        }
+
+        if (!await db.CurrencyRates.AnyAsync(cancellationToken))
+        {
+            var householdId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            db.CurrencyRates.AddRange(
+                new CurrencyRate
+                {
+                    HouseholdId = householdId,
+                    FromCurrency = "PLN",
+                    ToCurrency = "EUR",
+                    Rate = 0.2174m,
+                    EffectiveAt = DateTime.UtcNow.AddDays(-1),
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new CurrencyRate
+                {
+                    HouseholdId = householdId,
+                    FromCurrency = "PLN",
+                    ToCurrency = "USD",
+                    Rate = 0.2564m,
+                    EffectiveAt = DateTime.UtcNow.AddDays(-2),
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new CurrencyRate
+                {
+                    HouseholdId = householdId,
+                    FromCurrency = "PLN",
+                    ToCurrency = "GBP",
+                    Rate = 0.1887m,
+                    EffectiveAt = DateTime.UtcNow.AddDays(-3),
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
         }
 
         if (!await db.Tags.AnyAsync(cancellationToken))

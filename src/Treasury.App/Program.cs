@@ -8,8 +8,11 @@ using Treasury.App.Components;
 using Treasury.App.Contracts.Accounts;
 using Treasury.App.Contracts.Bills;
 using Treasury.App.Contracts.Budgets;
+using Treasury.App.Contracts.Rates;
 using Treasury.App.Contracts.Tags;
 using Treasury.App.Contracts.Transactions;
+using Treasury.App.Contracts.Valuations;
+using Treasury.App.Application.Valuations;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Auth;
 using Treasury.App.Infrastructure.Data;
@@ -403,6 +406,253 @@ app.MapPost("/api/bills", async (HttpContext httpContext, CreateBillRequest requ
     });
 }).RequireAuthorization();
 
+app.MapPost("/api/rates", async (HttpContext httpContext, UpsertRateRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var fromCurrency = request.FromCurrency?.Trim().ToUpperInvariant();
+    var toCurrency = request.ToCurrency?.Trim().ToUpperInvariant();
+    if (string.IsNullOrWhiteSpace(fromCurrency) || string.IsNullOrWhiteSpace(toCurrency) || request.Rate <= 0m || fromCurrency == toCurrency)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["fromCurrency"] = ["From currency is required."],
+            ["toCurrency"] = ["To currency is required and must differ from fromCurrency."],
+            ["rate"] = ["Rate must be greater than zero."]
+        });
+    }
+
+    var existing = await db.CurrencyRates.SingleOrDefaultAsync(x =>
+        x.HouseholdId == user.HouseholdId
+        && x.FromCurrency == fromCurrency
+        && x.ToCurrency == toCurrency);
+
+    if (existing is null)
+    {
+        db.CurrencyRates.Add(new CurrencyRate
+        {
+            HouseholdId = user.HouseholdId,
+            FromCurrency = fromCurrency,
+            ToCurrency = toCurrency,
+            Rate = request.Rate,
+            EffectiveAt = request.EffectiveAt == default ? DateTime.UtcNow : request.EffectiveAt,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+    }
+    else
+    {
+        existing.Rate = request.Rate;
+        existing.EffectiveAt = request.EffectiveAt == default ? DateTime.UtcNow : request.EffectiveAt;
+        existing.UpdatedAt = DateTime.UtcNow;
+    }
+
+    await db.SaveChangesAsync();
+    return Results.Ok();
+}).RequireAuthorization(Policies.OwnerOnly);
+
+app.MapGet("/api/rates/latest", async (HttpContext httpContext, string from, string to, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var fromCurrency = from.Trim().ToUpperInvariant();
+    var toCurrency = to.Trim().ToUpperInvariant();
+    var rate = await db.CurrencyRates.SingleOrDefaultAsync(x =>
+        x.HouseholdId == user.HouseholdId
+        && x.FromCurrency == fromCurrency
+        && x.ToCurrency == toCurrency);
+    if (rate is null)
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Ok(new
+    {
+        rate.FromCurrency,
+        rate.ToCurrency,
+        rate.Rate,
+        rate.EffectiveAt
+    });
+}).RequireAuthorization();
+
+app.MapPost("/api/valuations/bullion", async (HttpContext httpContext, UpdateBullionValueRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    if (string.IsNullOrWhiteSpace(request.AssetName) || request.Weight <= 0m || request.Purity <= 0m || request.Purity > 1m || request.UnitPrice <= 0m)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["assetName"] = ["Asset name is required."],
+            ["weight"] = ["Weight must be greater than zero."],
+            ["purity"] = ["Purity must be between 0 and 1."],
+            ["unitPrice"] = ["Unit price must be greater than zero."]
+        });
+    }
+
+    var total = BullionFormulaCalculator.Calculate(request.Weight, request.Purity, request.UnitPrice);
+    var valuation = new AssetValuation
+    {
+        HouseholdId = user.HouseholdId,
+        AssetName = request.AssetName.Trim(),
+        Kind = ValuationKind.BullionFormula,
+        Quantity = 1m,
+        Weight = request.Weight,
+        Purity = request.Purity,
+        CurrentUnitValue = request.UnitPrice,
+        CurrentTotalValue = total,
+        Currency = string.IsNullOrWhiteSpace(request.Currency) ? "PLN" : request.Currency.Trim().ToUpperInvariant(),
+        ValuationDate = request.ValuationDate == default ? DateTime.UtcNow : request.ValuationDate,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    db.AssetValuations.Add(valuation);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/valuations/{valuation.Id}", new
+    {
+        valuation.Id,
+        valuation.AssetName,
+        valuation.Kind,
+        valuation.CurrentUnitValue,
+        valuation.CurrentTotalValue,
+        valuation.Currency,
+        valuation.ValuationDate
+    });
+}).RequireAuthorization(Policies.OwnerOnly);
+
+app.MapPost("/api/valuations/coin", async (HttpContext httpContext, UpdateCoinValueRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    if (string.IsNullOrWhiteSpace(request.AssetName) || request.Quantity <= 0m || request.CurrentUnitValue <= 0m)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["assetName"] = ["Asset name is required."],
+            ["quantity"] = ["Quantity must be greater than zero."],
+            ["currentUnitValue"] = ["Current unit value must be greater than zero."]
+        });
+    }
+
+    var valuation = new AssetValuation
+    {
+        HouseholdId = user.HouseholdId,
+        AssetName = request.AssetName.Trim(),
+        Kind = ValuationKind.CoinManual,
+        Quantity = request.Quantity,
+        Weight = 0m,
+        Purity = 0m,
+        CurrentUnitValue = request.CurrentUnitValue,
+        CurrentTotalValue = decimal.Round(request.Quantity * request.CurrentUnitValue, 4, MidpointRounding.AwayFromZero),
+        Currency = string.IsNullOrWhiteSpace(request.Currency) ? "PLN" : request.Currency.Trim().ToUpperInvariant(),
+        ValuationDate = request.ValuationDate == default ? DateTime.UtcNow : request.ValuationDate,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    db.AssetValuations.Add(valuation);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/valuations/{valuation.Id}", new
+    {
+        valuation.Id,
+        valuation.AssetName,
+        valuation.Kind,
+        valuation.Quantity,
+        valuation.CurrentUnitValue,
+        valuation.CurrentTotalValue,
+        valuation.Currency,
+        valuation.ValuationDate
+    });
+}).RequireAuthorization(Policies.OwnerOnly);
+
+app.MapGet("/api/account-types", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var accountTypes = await db.AccountTypes
+        .Where(x => x.HouseholdId == user.HouseholdId)
+        .OrderBy(x => x.Name)
+        .Select(x => new
+        {
+            x.Id,
+            x.Name,
+            x.Description
+        })
+        .ToListAsync();
+
+    return Results.Ok(accountTypes);
+}).RequireAuthorization();
+
+app.MapPost("/api/account-types", async (HttpContext httpContext, CreateAccountTypeRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var name = request.Name?.Trim();
+    if (string.IsNullOrWhiteSpace(name))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["name"] = ["Account type name is required."]
+        });
+    }
+
+    var normalizedName = name.ToLowerInvariant();
+    var exists = await db.AccountTypes.AnyAsync(x => x.HouseholdId == user.HouseholdId && x.Name.ToLower() == normalizedName);
+    if (exists)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["name"] = ["This account type already exists for this household."]
+        });
+    }
+
+    var accountType = new AccountTypeDefinition
+    {
+        HouseholdId = user.HouseholdId,
+        Name = normalizedName,
+        Description = request.Description?.Trim() ?? string.Empty,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    db.AccountTypes.Add(accountType);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/account-types/{accountType.Id}", new
+    {
+        accountType.Id,
+        accountType.Name,
+        accountType.Description
+    });
+}).RequireAuthorization(Policies.OwnerOnly);
+
 app.MapGet("/api/accounts", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
 {
     var user = await userManager.GetUserAsync(httpContext.User);
@@ -412,7 +662,11 @@ app.MapGet("/api/accounts", async (HttpContext httpContext, TreasuryDbContext db
     }
 
     var accounts = await db.Accounts
-        .Where(x => x.HouseholdId == user.HouseholdId)
+        .Where(x =>
+            x.HouseholdId == user.HouseholdId
+            && (x.OwnerUserId == user.Id
+                || x.OwnerUserId == "seed"
+                || x.VisibilityRules.Any(v => v.ViewerUserId == user.Id)))
         .OrderBy(x => x.Name)
         .Select(x => new AccountResponse
         {
@@ -420,7 +674,8 @@ app.MapGet("/api/accounts", async (HttpContext httpContext, TreasuryDbContext db
             Name = x.Name,
             Currency = x.Currency,
             AccountType = x.AccountType,
-            CurrentBalance = x.CurrentBalance
+            CurrentBalance = x.CurrentBalance,
+            IsReadOnly = x.OwnerUserId != user.Id
         })
         .ToListAsync();
 
@@ -443,13 +698,23 @@ app.MapPost("/api/accounts", async (HttpContext httpContext, CreateAccountReques
         });
     }
 
+    var accountType = string.IsNullOrWhiteSpace(request.AccountType) ? "cash-wallet" : request.AccountType.Trim().ToLowerInvariant();
+    var isKnownType = await db.AccountTypes.AnyAsync(x => x.HouseholdId == user.HouseholdId && x.Name == accountType);
+    if (!isKnownType)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["accountType"] = ["Unknown account type for this household."]
+        });
+    }
+
     var account = new Account
     {
         HouseholdId = user.HouseholdId,
         OwnerUserId = user.Id,
         Name = request.Name.Trim(),
         Currency = string.IsNullOrWhiteSpace(request.Currency) ? "PLN" : request.Currency.Trim().ToUpperInvariant(),
-        AccountType = string.IsNullOrWhiteSpace(request.AccountType) ? "cash-wallet" : request.AccountType.Trim(),
+        AccountType = accountType,
         CurrentBalance = 0m
     };
 
@@ -462,10 +727,118 @@ app.MapPost("/api/accounts", async (HttpContext httpContext, CreateAccountReques
         Name = account.Name,
         Currency = account.Currency,
         AccountType = account.AccountType,
-        CurrentBalance = account.CurrentBalance
+        CurrentBalance = account.CurrentBalance,
+        IsReadOnly = false
     };
 
     return Results.Created($"/api/accounts/{account.Id}", response);
+}).RequireAuthorization();
+
+app.MapPost("/api/accounts/{id:guid}/share-readonly", async (HttpContext httpContext, Guid id, ShareAccountReadOnlyRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var email = request.Email?.Trim();
+    if (string.IsNullOrWhiteSpace(email))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["email"] = ["Viewer email is required."]
+        });
+    }
+
+    var account = await db.Accounts.SingleOrDefaultAsync(x => x.Id == id && x.HouseholdId == user.HouseholdId);
+    if (account is null)
+    {
+        return Results.NotFound();
+    }
+
+    if (account.OwnerUserId != user.Id)
+    {
+        return Results.Forbid();
+    }
+
+    var viewer = await userManager.FindByEmailAsync(email);
+    if (viewer is null || viewer.HouseholdId != user.HouseholdId)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["email"] = ["Viewer must be an existing user from the same household."]
+        });
+    }
+
+    if (viewer.Id == user.Id)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["email"] = ["You already own this account."]
+        });
+    }
+
+    var existingRule = await db.VisibilityRules.SingleOrDefaultAsync(x => x.AccountId == account.Id && x.ViewerUserId == viewer.Id);
+    if (existingRule is null)
+    {
+        db.VisibilityRules.Add(new VisibilityRule
+        {
+            AccountId = account.Id,
+            ViewerUserId = viewer.Id,
+            IsReadOnly = true,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+    else
+    {
+        existingRule.IsReadOnly = true;
+    }
+
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new
+    {
+        AccountId = account.Id,
+        ViewerUserId = viewer.Id,
+        IsReadOnly = true
+    });
+}).RequireAuthorization(Policies.OwnerOnly);
+
+app.MapGet("/api/accounts/{id:guid}/transactions", async (HttpContext httpContext, Guid id, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var canAccess = await db.Accounts.AnyAsync(x =>
+        x.Id == id
+        && x.HouseholdId == user.HouseholdId
+        && (x.OwnerUserId == user.Id || x.OwnerUserId == "seed" || x.VisibilityRules.Any(v => v.ViewerUserId == user.Id)));
+    if (!canAccess)
+    {
+        return Results.NotFound();
+    }
+
+    var transactions = await db.Transactions
+        .Where(x => x.HouseholdId == user.HouseholdId && x.AccountId == id)
+        .OrderByDescending(x => x.TransactionDate)
+        .Select(x => new
+        {
+            x.Id,
+            x.AccountId,
+            x.Description,
+            x.Category,
+            x.Amount,
+            x.Currency,
+            x.Type,
+            x.TransactionDate
+        })
+        .ToListAsync();
+
+    return Results.Ok(transactions);
 }).RequireAuthorization();
 
 app.MapGet("/api/transactions", async (HttpContext httpContext, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
@@ -476,8 +849,16 @@ app.MapGet("/api/transactions", async (HttpContext httpContext, TreasuryDbContex
         return Results.Unauthorized();
     }
 
+    var visibleAccountIds = db.Accounts
+        .Where(x =>
+            x.HouseholdId == user.HouseholdId
+            && (x.OwnerUserId == user.Id
+                || x.OwnerUserId == "seed"
+                || x.VisibilityRules.Any(v => v.ViewerUserId == user.Id)))
+        .Select(x => x.Id);
+
     var transactions = await db.Transactions
-        .Where(x => x.HouseholdId == user.HouseholdId)
+        .Where(x => x.HouseholdId == user.HouseholdId && visibleAccountIds.Contains(x.AccountId))
         .OrderByDescending(x => x.TransactionDate)
         .Select(x => new
         {
@@ -522,6 +903,10 @@ app.MapPost("/api/transactions", async (HttpContext httpContext, CreateTransacti
     if (account is null)
     {
         return Results.NotFound();
+    }
+    if (account.OwnerUserId != user.Id)
+    {
+        return Results.Forbid();
     }
 
     var normalizedType = (request.Type ?? "expense").Trim().ToLowerInvariant();
@@ -583,6 +968,147 @@ app.MapPost("/api/transactions", async (HttpContext httpContext, CreateTransacti
         Tags = validTagIds
     });
 }).RequireAuthorization();
+
+app.MapPost("/api/transfers", async (HttpContext httpContext, CreateTransferRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    if (request.FromAccountId == Guid.Empty || request.ToAccountId == Guid.Empty || request.FromAccountId == request.ToAccountId || request.Amount <= 0m)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["fromAccountId"] = ["A valid source account is required."],
+            ["toAccountId"] = ["A valid destination account is required."],
+            ["amount"] = ["Transfer amount must be greater than zero."]
+        });
+    }
+
+    var fromAccount = await db.Accounts.SingleOrDefaultAsync(x => x.Id == request.FromAccountId && x.HouseholdId == user.HouseholdId);
+    var toAccount = await db.Accounts.SingleOrDefaultAsync(x => x.Id == request.ToAccountId && x.HouseholdId == user.HouseholdId);
+    if (fromAccount is null || toAccount is null)
+    {
+        return Results.NotFound();
+    }
+
+    if (fromAccount.OwnerUserId != user.Id || toAccount.OwnerUserId != user.Id)
+    {
+        return Results.Forbid();
+    }
+
+    var transferDate = request.TransferDate == default ? DateTime.UtcNow : request.TransferDate;
+    var currency = string.IsNullOrWhiteSpace(request.Currency) ? fromAccount.Currency : request.Currency.Trim().ToUpperInvariant();
+    var description = string.IsNullOrWhiteSpace(request.Description) ? "Account transfer" : request.Description.Trim();
+
+    var transfer = new Transfer
+    {
+        HouseholdId = user.HouseholdId,
+        FromAccountId = fromAccount.Id,
+        ToAccountId = toAccount.Id,
+        Amount = request.Amount,
+        Currency = currency,
+        Description = description,
+        TransferDate = transferDate,
+        CreatedAt = DateTime.UtcNow
+    };
+
+    var outflow = new Transaction
+    {
+        HouseholdId = user.HouseholdId,
+        AccountId = fromAccount.Id,
+        Description = $"{description} -> {toAccount.Name}",
+        Category = "Transfer",
+        Amount = request.Amount,
+        Currency = currency,
+        Type = "transfer-out",
+        TransactionDate = transferDate,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    var inflow = new Transaction
+    {
+        HouseholdId = user.HouseholdId,
+        AccountId = toAccount.Id,
+        Description = $"{description} <- {fromAccount.Name}",
+        Category = "Transfer",
+        Amount = request.Amount,
+        Currency = currency,
+        Type = "transfer-in",
+        TransactionDate = transferDate,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    fromAccount.CurrentBalance -= Math.Abs(request.Amount);
+    toAccount.CurrentBalance += Math.Abs(request.Amount);
+    fromAccount.UpdatedAt = DateTime.UtcNow;
+    toAccount.UpdatedAt = DateTime.UtcNow;
+
+    db.Transfers.Add(transfer);
+    db.Transactions.Add(outflow);
+    db.Transactions.Add(inflow);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/transfers/{transfer.Id}", new
+    {
+        transfer.Id,
+        transfer.FromAccountId,
+        transfer.ToAccountId,
+        transfer.Amount,
+        transfer.Currency,
+        transfer.TransferDate
+    });
+}).RequireAuthorization(Policies.OwnerOnly);
+
+app.MapPost("/api/accounts/{id:guid}/balance-correction", async (HttpContext httpContext, Guid id, BalanceCorrectionRequest request, TreasuryDbContext db, UserManager<ApplicationUser> userManager) =>
+{
+    var user = await userManager.GetUserAsync(httpContext.User);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var account = await db.Accounts.SingleOrDefaultAsync(x => x.Id == id && x.HouseholdId == user.HouseholdId);
+    if (account is null)
+    {
+        return Results.NotFound();
+    }
+
+    if (account.OwnerUserId != user.Id)
+    {
+        return Results.Forbid();
+    }
+
+    var delta = request.NewBalance - account.CurrentBalance;
+    account.CurrentBalance = request.NewBalance;
+    account.UpdatedAt = DateTime.UtcNow;
+
+    db.Transactions.Add(new Transaction
+    {
+        HouseholdId = user.HouseholdId,
+        AccountId = account.Id,
+        Description = string.IsNullOrWhiteSpace(request.Description) ? "Balance correction" : request.Description.Trim(),
+        Category = "Correction",
+        Amount = delta,
+        Currency = account.Currency,
+        Type = "balance-correction",
+        TransactionDate = DateTime.UtcNow,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    });
+
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new
+    {
+        account.Id,
+        account.CurrentBalance
+    });
+}).RequireAuthorization(Policies.OwnerOnly);
 
 app.UseStaticFiles();
 app.UseAuthentication();

@@ -7,4 +7,5 @@ public sealed class AccountResponse
     public string Currency { get; set; } = string.Empty;
     public string AccountType { get; set; } = string.Empty;
     public decimal CurrentBalance { get; set; }
+    public bool IsReadOnly { get; set; }
 }

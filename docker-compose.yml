@@ -20,6 +20,11 @@ services:
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=treasury;Username=treasury;Password=treasury
     ports:
       - "8080:8080"
+    volumes:
+      - treasury-keys:/root/.aspnet/DataProtection-Keys
     depends_on:
       postgres:
         condition: service_healthy
+
+volumes:
+  treasury-keys:

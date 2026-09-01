@@ -1,0 +1,63 @@
+@page "/shared"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Shared portfolio</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">Accounts shared with you as read-only.</MudText>
+
+        @if (_accounts.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No shared accounts yet.</MudAlert>
+        }
+        else
+        {
+            <MudTable T="Account" Items="_accounts" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Account</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Balance</MudTh>
+                    <MudTh>Access</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Account">@context.Name</MudTd>
+                    <MudTd DataLabel="Type">@context.AccountType</MudTd>
+                    <MudTd DataLabel="Balance">@context.CurrentBalance.ToString("N2") @context.Currency</MudTd>
+                    <MudTd DataLabel="Access">Read-only</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<Account> _accounts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            _accounts.Clear();
+            return;
+        }
+
+        _accounts.Clear();
+        _accounts.AddRange(await DbContext.Accounts
+            .Where(x =>
+                x.HouseholdId == user.HouseholdId
+                && x.OwnerUserId != user.Id
+                && x.VisibilityRules.Any(v => v.ViewerUserId == user.Id && v.IsReadOnly))
+            .OrderBy(x => x.Name)
+            .ToListAsync());
+    }
+
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(auth.User);
+    }
+}
