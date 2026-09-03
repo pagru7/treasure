@@ -126,16 +126,36 @@ public sealed class CreateTransferEndpoint(TreasuryDbContext db, UserManager<App
         fromAccount.UpdatedAt = DateTime.UtcNow;
         toAccount.UpdatedAt = DateTime.UtcNow;
 
-        db.Transfers.Add(transfer);
-        db.Transactions.Add(outflow);
-        db.Transactions.Add(inflow);
-        await db.SaveChangesAsync(ct);
+        async Task PersistAsync()
+        {
+            db.Transfers.Add(transfer);
+            db.Transactions.Add(outflow);
+            db.Transactions.Add(inflow);
+            await db.SaveChangesAsync(ct);
+
+            transfer.OutflowTransactionId = outflow.Id;
+            transfer.InflowTransactionId = inflow.Id;
+            await db.SaveChangesAsync(ct);
+        }
+
+        if (db.Database.IsRelational())
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await PersistAsync();
+            await transaction.CommitAsync(ct);
+        }
+        else
+        {
+            await PersistAsync();
+        }
 
         await SendAsync(new
         {
             transfer.Id,
             transfer.FromAccountId,
             transfer.ToAccountId,
+            transfer.OutflowTransactionId,
+            transfer.InflowTransactionId,
             transfer.Amount,
             transfer.Currency,
             transfer.TransferDate
