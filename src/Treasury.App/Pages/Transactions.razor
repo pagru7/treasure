@@ -116,7 +116,10 @@
 
 @code {
     private readonly List<Treasury.App.Domain.Transaction> _transactions = new();
+    // active accounts used for the picker
     private readonly List<Treasury.App.Domain.Account> _accounts = new();
+    // full visible accounts (includes inactive) used for mapping historical transactions to names
+    private readonly List<Treasury.App.Domain.Account> _visibleAccounts = new();
     private readonly List<Treasury.App.Domain.Tag> _tags = new();
     private readonly Dictionary<Guid, List<Treasury.App.Domain.Tag>> _transactionTags = new();
     private readonly HashSet<Guid> _selectedTagIds = new();
@@ -132,6 +135,10 @@
     {
         _accounts.Clear();
         _accounts.AddRange(await DbContext.Accounts.Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync());
+
+        // Load full visible account list (includes inactive) so historical transactions still show account names
+        _visibleAccounts.Clear();
+        _visibleAccounts.AddRange(await DbContext.Accounts.OrderBy(x => x.Name).ToListAsync());
 
         _tags.Clear();
         _tags.AddRange(await DbContext.Tags.OrderBy(x => x.Name).ToListAsync());
@@ -191,6 +198,13 @@
         if (account is null)
         {
             Snackbar.Add("Selected account could not be found.", Severity.Error);
+            return;
+        }
+
+        // Prevent creating transactions against inactive accounts via the UI save path
+        if (!account.IsActive)
+        {
+            Snackbar.Add("Selected account is inactive. Reactivate it before adding transactions.", Severity.Warning);
             return;
         }
 
@@ -257,7 +271,8 @@
 
     private string GetAccountName(Guid accountId)
     {
-        return _accounts.FirstOrDefault(x => x.Id == accountId)?.Name ?? "Unknown account";
+        // Use the full visible accounts collection so historical transactions from inactive accounts still show a name
+        return _visibleAccounts.FirstOrDefault(x => x.Id == accountId)?.Name ?? "Unknown account";
     }
 
     private sealed class NewTransactionForm

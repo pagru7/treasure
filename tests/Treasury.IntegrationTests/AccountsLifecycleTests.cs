@@ -153,6 +153,39 @@ public class AccountsLifecycleTests
         body.Should().Contain("inactive");
     }
 
+    [Fact]
+    public async Task TransactionsPage_Shows_Inactive_Account_Name_For_Historical_Transactions()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var accountId = await CreateAccountAsync(client, name: "HistoricAccount");
+
+        var transactionResponse = await client.PostAsJsonAsync("/api/transactions", new
+        {
+            AccountId = accountId,
+            Description = "Old payment",
+            Category = "General",
+            Amount = 12.34m,
+            Currency = "PLN",
+            Type = "expense",
+            TransactionDate = DateTime.UtcNow
+        });
+        transactionResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var deactivateResponse = await client.PutAsJsonAsync($"/api/accounts/{accountId}/active-state", new { IsActive = false });
+        deactivateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Request the transactions page and ensure the historical transaction still shows the account name
+        var pageResponse = await client.GetAsync("/transactions");
+        pageResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await pageResponse.Content.ReadAsStringAsync();
+
+        html.Should().Contain("HistoricAccount");
+        html.Should().NotContain("Unknown account");
+    }
+
     private static HttpClient CreateAuthenticatedClient(TreasuryHostFactory app) =>
         app.CreateClient(new WebApplicationFactoryClientOptions
         {
