@@ -8,6 +8,46 @@ namespace Treasury.IntegrationTests;
 
 public class SharedReadOnlyUiPermissionTests
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task Share_Readonly_Endpoint_Rejects_Blank_Email(string? email)
+    {
+        await using var app = new TreasuryHostFactory();
+
+        var ownerClient = app.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true
+        });
+
+        var ownerEmail = $"owner-{Guid.NewGuid():N}@example.com";
+        const string password = "Password123!";
+
+        await RegisterAndSignInAsync(ownerClient, ownerEmail, password);
+
+        var accountResponse = await ownerClient.PostAsJsonAsync("/api/accounts", new
+        {
+            Name = "Owner account",
+            Currency = "PLN",
+            AccountType = "cash-wallet"
+        });
+        accountResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var accountJson = JsonDocument.Parse(await accountResponse.Content.ReadAsStringAsync());
+        var accountId = accountJson.RootElement.GetProperty("id").GetGuid();
+
+        var shareResponse = await ownerClient.PostAsJsonAsync($"/api/accounts/{accountId}/share-readonly", new
+        {
+            Email = email
+        });
+
+        shareResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await shareResponse.Content.ReadAsStringAsync();
+        body.Should().Contain("Email");
+        body.Should().Contain("required");
+    }
+
     [Fact]
     public async Task Shared_User_Cannot_Post_To_Owner_Edit_Endpoints()
     {

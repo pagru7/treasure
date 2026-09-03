@@ -122,6 +122,8 @@ public class AccountsSharingUiTests
         var body = await pageResponse.Content.ReadAsStringAsync();
         body.Should().Contain("Loaded account");
         body.Should().Contain("Unable to load shared viewer details.");
+        body.Should().Contain("Shared viewer details unavailable.");
+        body.Should().NotContain("Nobody yet.");
     }
 
     [Fact]

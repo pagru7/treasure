@@ -73,7 +73,11 @@
                             {
                                 <MudDivider Class="my-3" />
                                 <MudText Typo="Typo.subtitle2">Shared with:</MudText>
-                                @if (account.SharedWith.Count == 0)
+                                @if (account.SharedWithLoadFailed)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Shared viewer details unavailable.</MudText>
+                                }
+                                else if (account.SharedWith.Count == 0)
                                 {
                                     <MudText Typo="Typo.body2" Color="Color.Secondary">Nobody yet.</MudText>
                                 }

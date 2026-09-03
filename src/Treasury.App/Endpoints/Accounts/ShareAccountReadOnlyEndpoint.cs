@@ -29,7 +29,14 @@ public sealed class ShareAccountReadOnlyEndpoint(AccountSharingService accountSh
             return;
         }
 
-        var result = await accountSharingService.ShareReadOnlyAsync(user, request.Id, request.Email, ct);
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            AddError(x => x.Email, "Email is required.");
+            await SendErrorsAsync(cancellation: ct);
+            return;
+        }
+
+        var result = await accountSharingService.ShareReadOnlyAsync(user, request.Id, request.Email.Trim(), ct);
         if (!result.Succeeded)
         {
             if (result.ErrorMessage == "Account not found.")

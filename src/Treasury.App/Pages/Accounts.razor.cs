@@ -39,7 +39,8 @@ public partial class Accounts
             return;
         }
 
-        await Task.WhenAll(LoadAccountsAsync(), LoadHouseholdUsersAsync());
+        await LoadAccountsAsync();
+        await LoadHouseholdUsersAsync();
     }
 
     private async Task LoadAccountsAsync()
@@ -56,6 +57,7 @@ public partial class Accounts
             _accountsLoadError = null;
             var accounts = await AccountSharingService.GetVisibleAccountsAsync(_currentUser, CancellationToken.None);
             Dictionary<Guid, List<AccountViewerChoice>> viewersByAccountId;
+            var sharedViewerLoadFailed = false;
 
             try
             {
@@ -73,6 +75,7 @@ public partial class Accounts
             catch (Exception ex)
             {
                 viewersByAccountId = new Dictionary<Guid, List<AccountViewerChoice>>();
+                sharedViewerLoadFailed = true;
                 _accountsLoadError = "Unable to load shared viewer details.";
                 Snackbar.Add($"Unable to load shared viewer details: {ex.Message}", Severity.Error);
             }
@@ -86,7 +89,8 @@ public partial class Accounts
                 AccountType = account.AccountType,
                 CurrentBalance = account.CurrentBalance,
                 IsOwner = account.OwnerUserId == _currentUser.Id,
-                SharedWith = viewersByAccountId.TryGetValue(account.Id, out var viewers) ? viewers : new List<AccountViewerChoice>()
+                SharedWith = viewersByAccountId.TryGetValue(account.Id, out var viewers) ? viewers : new List<AccountViewerChoice>(),
+                SharedWithLoadFailed = sharedViewerLoadFailed
             }));
         }
         catch (Exception ex)
@@ -215,5 +219,6 @@ public partial class Accounts
         public bool IsOwner { get; set; }
         public string SelectedShareEmail { get; set; } = string.Empty;
         public List<AccountViewerChoice> SharedWith { get; set; } = new();
+        public bool SharedWithLoadFailed { get; set; }
     }
 }

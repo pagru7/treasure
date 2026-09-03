@@ -74,6 +74,11 @@ public class AccountSharingService(TreasuryDbContext db, UserManager<Application
             return new ShareReadOnlyResult(false, "Only the owner can share this account.");
         }
 
+        if (string.IsNullOrWhiteSpace(viewerEmail))
+        {
+            return new ShareReadOnlyResult(false, "Email is required.");
+        }
+
         var normalizedEmail = viewerEmail.Trim();
         var viewer = await userManager.FindByEmailAsync(normalizedEmail);
         if (viewer is null || viewer.HouseholdId != user.HouseholdId)
