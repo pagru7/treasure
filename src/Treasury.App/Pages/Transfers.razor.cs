@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor;
+using Treasury.App.Application.Transfers;
+using Treasury.App.Contracts.Transactions;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
@@ -14,6 +16,7 @@ public partial class Transfers
     [Inject] public ISnackbar Snackbar { get; set; } = default!;
     [Inject] public AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
     [Inject] public UserManager<ApplicationUser> UserManager { get; set; } = default!;
+    [Inject] public TransferCreationService TransferCreationService { get; set; } = default!;
 
     private ApplicationUser? _currentUser;
     private readonly List<AccountChoice> _accounts = new();
@@ -131,100 +134,29 @@ public partial class Transfers
             return;
         }
 
-        var fromAccount = await DbContext.Accounts.SingleOrDefaultAsync(x =>
-            x.Id == fromAccountId &&
-            x.HouseholdId == _currentUser.HouseholdId &&
-            x.OwnerUserId == _currentUser.Id, CancellationToken.None);
-
-        var toAccount = await DbContext.Accounts.SingleOrDefaultAsync(x =>
-            x.Id == toAccountId &&
-            x.HouseholdId == _currentUser.HouseholdId &&
-            x.OwnerUserId == _currentUser.Id, CancellationToken.None);
-
-        if (fromAccount is null || toAccount is null)
+        var result = await TransferCreationService.CreateAsync(_currentUser, new CreateTransferRequest
         {
-            Snackbar.Add("Transfer accounts were not found.", Severity.Error);
+            FromAccountId = fromAccountId,
+            ToAccountId = toAccountId,
+            Amount = _newTransfer.Amount,
+            Currency = string.Empty,
+            Description = _newTransfer.Description,
+            TransferDate = _newTransfer.TransferDate ?? DateTime.UtcNow
+        }, CancellationToken.None);
+
+        if (!result.Succeeded)
+        {
+            var severity = result.Status == TransferCreationStatus.Forbidden || result.Status == TransferCreationStatus.NotFound
+                ? Severity.Error
+                : Severity.Warning;
+            var message = result.Message ?? "Unable to create transfer.";
+            if (result.Issues.Count > 0)
+            {
+                message = result.Issues[0].Message;
+            }
+
+            Snackbar.Add(message, severity);
             return;
-        }
-
-        if (!fromAccount.IsActive || !toAccount.IsActive)
-        {
-            Snackbar.Add("Transfers are allowed only between active accounts.", Severity.Warning);
-            return;
-        }
-
-        var transferDate = _newTransfer.TransferDate ?? DateTime.UtcNow;
-        var description = string.IsNullOrWhiteSpace(_newTransfer.Description)
-            ? "Account transfer"
-            : _newTransfer.Description.Trim();
-        var currency = fromAccount.Currency;
-
-        var transfer = new Transfer
-        {
-            HouseholdId = _currentUser.HouseholdId,
-            FromAccountId = fromAccount.Id,
-            ToAccountId = toAccount.Id,
-            Amount = _newTransfer.Amount,
-            Currency = currency,
-            Description = description,
-            TransferDate = transferDate,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var outflow = new Transaction
-        {
-            HouseholdId = _currentUser.HouseholdId,
-            AccountId = fromAccount.Id,
-            Description = $"{description} -> {toAccount.Name}",
-            Category = "Transfer",
-            Amount = _newTransfer.Amount,
-            Currency = currency,
-            Type = "transfer-out",
-            TransactionDate = transferDate,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        var inflow = new Transaction
-        {
-            HouseholdId = _currentUser.HouseholdId,
-            AccountId = toAccount.Id,
-            Description = $"{description} <- {fromAccount.Name}",
-            Category = "Transfer",
-            Amount = _newTransfer.Amount,
-            Currency = currency,
-            Type = "transfer-in",
-            TransactionDate = transferDate,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        fromAccount.CurrentBalance -= Math.Abs(_newTransfer.Amount);
-        toAccount.CurrentBalance += Math.Abs(_newTransfer.Amount);
-        fromAccount.UpdatedAt = DateTime.UtcNow;
-        toAccount.UpdatedAt = DateTime.UtcNow;
-
-        async Task PersistAsync()
-        {
-            DbContext.Transfers.Add(transfer);
-            DbContext.Transactions.Add(outflow);
-            DbContext.Transactions.Add(inflow);
-            await DbContext.SaveChangesAsync();
-
-            transfer.OutflowTransactionId = outflow.Id;
-            transfer.InflowTransactionId = inflow.Id;
-            await DbContext.SaveChangesAsync();
-        }
-
-        if (DbContext.Database.IsRelational())
-        {
-            await using var transaction = await DbContext.Database.BeginTransactionAsync();
-            await PersistAsync();
-            await transaction.CommitAsync();
-        }
-        else
-        {
-            await PersistAsync();
         }
 
         _newTransfer.Description = string.Empty;

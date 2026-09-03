@@ -20,3 +20,12 @@
 
 ## Commit
 - 4a56c75
+
+## Follow-up fixes
+- Extracted a shared `TransferCreationService` so the transfers page and `POST /api/transfers` use the same canonical write path.
+- Changed transfer link columns to nullable so pre-existing rows are not backfilled with `Guid.Empty` placeholders.
+- Kept atomic persistence, active-account checks, and paired transfer transaction creation intact.
+
+## Follow-up validation
+- `dotnet test tests\Treasury.IntegrationTests\Treasury.IntegrationTests.csproj -c Debug --filter "FullyQualifiedName~TransfersWorkflowTests"` — passed, 3/3 tests.
+- `dotnet test tests\Treasury.IntegrationTests\Treasury.IntegrationTests.csproj -c Debug --filter "FullyQualifiedName~AccountsLifecycleTests"` — passed, 7/7 tests.

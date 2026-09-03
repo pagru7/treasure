@@ -14,15 +14,13 @@ namespace Treasury.App.Infrastructure.Migrations
                 name: "InflowTransactionId",
                 table: "Transfers",
                 type: "uuid",
-                nullable: false,
-                defaultValue: Guid.Empty);
+                nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
                 name: "OutflowTransactionId",
                 table: "Transfers",
                 type: "uuid",
-                nullable: false,
-                defaultValue: Guid.Empty);
+                nullable: true);
         }
 
         /// <inheritdoc />

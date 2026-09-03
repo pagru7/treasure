@@ -6,8 +6,8 @@ public sealed class Transfer
     public Guid HouseholdId { get; set; }
     public Guid FromAccountId { get; set; }
     public Guid ToAccountId { get; set; }
-    public Guid OutflowTransactionId { get; set; }
-    public Guid InflowTransactionId { get; set; }
+    public Guid? OutflowTransactionId { get; set; }
+    public Guid? InflowTransactionId { get; set; }
     public decimal Amount { get; set; }
     public string Currency { get; set; } = "PLN";
     public string Description { get; set; } = string.Empty;

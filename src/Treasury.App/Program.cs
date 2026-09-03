@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 using Treasury.App.Application.Dashboard;
 using Treasury.App.Application.Accounts;
+using Treasury.App.Application.Transfers;
 using Treasury.App.Components;
 using Treasury.App.Contracts.Accounts;
 using Treasury.App.Contracts.Bills;
@@ -93,6 +94,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddFastEndpoints();
 builder.Services.AddMudServices();
 builder.Services.AddScoped<AccountSharingService>();
+builder.Services.AddScoped<TransferCreationService>();
 
 var app = builder.Build();
 

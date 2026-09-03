@@ -607,10 +607,10 @@ namespace Treasury.App.Infrastructure.Migrations
                     b.Property<Guid>("HouseholdId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("InflowTransactionId")
+                    b.Property<Guid?>("InflowTransactionId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("OutflowTransactionId")
+                    b.Property<Guid?>("OutflowTransactionId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ToAccountId")
