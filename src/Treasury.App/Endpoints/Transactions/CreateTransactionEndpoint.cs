@@ -77,6 +77,7 @@ public sealed class CreateTransactionEndpoint(TreasuryDbContext db, UserManager<
             delta = request.Amount;
         }
 
+        var utcNow = DateTime.UtcNow;
         var transaction = new Transaction
         {
             HouseholdId = user.HouseholdId,
@@ -86,7 +87,9 @@ public sealed class CreateTransactionEndpoint(TreasuryDbContext db, UserManager<
             Amount = request.Amount,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? account.Currency : request.Currency.Trim().ToUpperInvariant(),
             Type = normalizedType,
-            TransactionDate = request.TransactionDate == default ? DateTime.UtcNow : request.TransactionDate
+            TransactionDate = request.TransactionDate == default ? utcNow : request.TransactionDate,
+            CreatedAt = utcNow,
+            UpdatedAt = utcNow
         };
 
         var validTagIds = await db.Tags
@@ -105,7 +108,8 @@ public sealed class CreateTransactionEndpoint(TreasuryDbContext db, UserManager<
 
         db.Transactions.Add(transaction);
         account.CurrentBalance += delta;
-        account.UpdatedAt = DateTime.UtcNow;
+        transaction.BalanceAfterTransaction = account.CurrentBalance;
+        account.UpdatedAt = utcNow;
         await db.SaveChangesAsync(ct);
 
         await SendAsync(new
@@ -118,6 +122,7 @@ public sealed class CreateTransactionEndpoint(TreasuryDbContext db, UserManager<
             transaction.Currency,
             transaction.Type,
             transaction.TransactionDate,
+            transaction.BalanceAfterTransaction,
             Tags = validTagIds
         }, StatusCodes.Status201Created, ct);
     }

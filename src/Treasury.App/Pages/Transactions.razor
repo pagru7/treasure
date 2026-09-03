@@ -70,6 +70,80 @@
             </MudStack>
         </MudPaper>
 
+        @if (_editingTransaction is not null)
+        {
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudStack Spacing="3">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.subtitle1">Edit transaction</MudText>
+                        <MudText Typo="Typo.body2">
+                            @(_editingTransaction.IsLatest
+                                ? "This is the latest transaction for the account, so amount, date, and type can be edited."
+                                : "This is not the latest transaction, so only description, category, and tags can be edited.")
+                        </MudText>
+                    </MudStack>
+
+                    <MudGrid>
+                        <MudItem xs="12" md="4">
+                            <MudTextField Label="Description" @bind-Value="_editingTransaction.Description" Required="true" />
+                        </MudItem>
+                        <MudItem xs="12" md="3">
+                            <MudTextField Label="Category" @bind-Value="_editingTransaction.Category" />
+                        </MudItem>
+                        <MudItem xs="12" md="2">
+                            <MudNumericField Label="Amount"
+                                             @bind-Value="_editingTransaction.Amount"
+                                             Required="true"
+                                             Min="0.01m"
+                                             Disabled="@(!_editingTransaction.IsLatest)" />
+                        </MudItem>
+                        <MudItem xs="12" md="2">
+                            <MudSelect T="string"
+                                       Label="Type"
+                                       @bind-Value="_editingTransaction.Type"
+                                       Disabled="@(!_editingTransaction.IsLatest)">
+                                <MudSelectItem Value="@("income")">Income</MudSelectItem>
+                                <MudSelectItem Value="@("expense")">Expense</MudSelectItem>
+                                <MudSelectItem Value="@("transfer")">Transfer</MudSelectItem>
+                                <MudSelectItem Value="@("transfer-out")">Transfer out</MudSelectItem>
+                                <MudSelectItem Value="@("transfer-in")">Transfer in</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="1">
+                            <MudDatePicker Label="Date"
+                                           @bind-Date="_editingTransaction.TransactionDate"
+                                           Disabled="@(!_editingTransaction.IsLatest)" />
+                        </MudItem>
+                    </MudGrid>
+
+                    <MudDivider />
+
+                    <MudText Typo="Typo.subtitle2">Tags</MudText>
+                    @if (_tags.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">No tags yet. Add one from the Tags page.</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Class="mt-2" Wrap="Wrap.Wrap">
+                            @foreach (var tag in _tags)
+                            {
+                                <MudCheckBox T="bool"
+                                             Value="@_editingSelectedTagIds.Contains(tag.Id)"
+                                             ValueChanged="@(value => ToggleEditingTag(tag.Id, value))"
+                                             Label="@tag.Name" />
+                            }
+                        </MudStack>
+                    }
+
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        <MudButton Variant="Variant.Outlined" OnClick="CancelEditAsync">Cancel</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="SaveTransactionEditAsync">Save changes</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+
         @if (_transactions.Count == 0)
         {
             <MudAlert Severity="Severity.Info">No transactions yet. Add your first household transaction to start tracking cash flow.</MudAlert>
@@ -86,6 +160,7 @@
                         <MudTh>Type</MudTh>
                         <MudTh>Amount</MudTh>
                         <MudTh>Date</MudTh>
+                        <MudTh>Actions</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Description">@context.Description</MudTd>
@@ -107,6 +182,13 @@
                         <MudTd DataLabel="Type">@context.Type</MudTd>
                         <MudTd DataLabel="Amount">@context.Amount.ToString("N2") @context.Currency</MudTd>
                         <MudTd DataLabel="Date">@context.TransactionDate.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Outlined"
+                                       OnClick="@(() => BeginEdit(context))">
+                                Edit
+                            </MudButton>
+                        </MudTd>
                     </RowTemplate>
                 </MudTable>
             </MudPaper>
@@ -123,8 +205,10 @@
     private readonly List<Treasury.App.Domain.Tag> _tags = new();
     private readonly Dictionary<Guid, List<Treasury.App.Domain.Tag>> _transactionTags = new();
     private readonly HashSet<Guid> _selectedTagIds = new();
+    private readonly HashSet<Guid> _editingSelectedTagIds = new();
 
     private readonly NewTransactionForm _newTransaction = new();
+    private EditingTransactionForm? _editingTransaction;
 
     protected override async Task OnInitializedAsync()
     {
@@ -144,7 +228,11 @@
         _tags.AddRange(await DbContext.Tags.OrderBy(x => x.Name).ToListAsync());
 
         _transactions.Clear();
-        _transactions.AddRange(await DbContext.Transactions.OrderByDescending(x => x.TransactionDate).ToListAsync());
+        _transactions.AddRange(await DbContext.Transactions
+            .OrderByDescending(x => x.TransactionDate)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync());
 
         _transactionTags.Clear();
         var tagLinks = await DbContext.TransactionTags
@@ -208,20 +296,9 @@
             return;
         }
 
-        var normalizedType = (_newTransaction.Type ?? "expense").Trim().ToLowerInvariant();
-        var delta = _newTransaction.Amount;
-        if (normalizedType == "expense")
-        {
-            delta = -Math.Abs(_newTransaction.Amount);
-        }
-        else if (normalizedType == "income")
-        {
-            delta = Math.Abs(_newTransaction.Amount);
-        }
-        else if (normalizedType == "transfer")
-        {
-            delta = _newTransaction.Amount;
-        }
+        var normalizedType = NormalizeType(_newTransaction.Type);
+        var delta = GetDelta(_newTransaction.Amount, normalizedType);
+        var utcNow = DateTime.UtcNow;
 
         var transaction = new Treasury.App.Domain.Transaction
         {
@@ -232,9 +309,9 @@
             Amount = _newTransaction.Amount,
             Currency = account.Currency,
             Type = normalizedType,
-            TransactionDate = _newTransaction.TransactionDate ?? DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            TransactionDate = _newTransaction.TransactionDate ?? utcNow,
+            CreatedAt = utcNow,
+            UpdatedAt = utcNow
         };
 
         foreach (var tagId in _selectedTagIds)
@@ -255,7 +332,8 @@
 
         DbContext.Transactions.Add(transaction);
         account.CurrentBalance += delta;
-        account.UpdatedAt = DateTime.UtcNow;
+        transaction.BalanceAfterTransaction = account.CurrentBalance;
+        account.UpdatedAt = utcNow;
         await DbContext.SaveChangesAsync();
 
         _newTransaction.Description = string.Empty;
@@ -269,10 +347,226 @@
         await LoadAsync();
     }
 
+    private void BeginEdit(Treasury.App.Domain.Transaction transaction)
+    {
+        _editingTransaction = new EditingTransactionForm
+        {
+            Id = transaction.Id,
+            AccountId = transaction.AccountId,
+            Description = transaction.Description,
+            Category = transaction.Category,
+            Amount = transaction.Amount,
+            Type = transaction.Type,
+            TransactionDate = transaction.TransactionDate,
+            IsLatest = IsLatestTransaction(transaction)
+        };
+
+        _editingSelectedTagIds.Clear();
+        if (_transactionTags.TryGetValue(transaction.Id, out var tags))
+        {
+            foreach (var tag in tags)
+            {
+                _editingSelectedTagIds.Add(tag.Id);
+            }
+        }
+    }
+
+    private Task CancelEditAsync()
+    {
+        _editingTransaction = null;
+        _editingSelectedTagIds.Clear();
+        return Task.CompletedTask;
+    }
+
+    private void ToggleEditingTag(Guid tagId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            _editingSelectedTagIds.Add(tagId);
+            return;
+        }
+
+        _editingSelectedTagIds.Remove(tagId);
+    }
+
+    private async Task SaveTransactionEditAsync()
+    {
+        if (_editingTransaction is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editingTransaction.Description))
+        {
+            Snackbar.Add("Description is required.", Severity.Warning);
+            return;
+        }
+
+        if (_editingTransaction.IsLatest && _editingTransaction.Amount <= 0m)
+        {
+            Snackbar.Add("Amount must be greater than zero.", Severity.Warning);
+            return;
+        }
+
+        var transaction = await DbContext.Transactions
+            .Include(x => x.TransactionTags)
+            .SingleOrDefaultAsync(x => x.Id == _editingTransaction.Id);
+        if (transaction is null)
+        {
+            Snackbar.Add("Transaction could not be found.", Severity.Error);
+            return;
+        }
+
+        var account = await DbContext.Accounts.SingleOrDefaultAsync(x => x.Id == transaction.AccountId);
+        if (account is null)
+        {
+            Snackbar.Add("Account could not be found.", Severity.Error);
+            return;
+        }
+
+        var accountTransactions = await DbContext.Transactions
+            .Where(x => x.AccountId == account.Id)
+            .ToListAsync();
+
+        var originalSnapshots = accountTransactions
+            .Select(x => new TransactionBalanceSnapshot(x.Id, x.Amount, x.Type, x.TransactionDate, x.CreatedAt))
+            .ToList();
+
+        var latestTransactionId = originalSnapshots
+            .OrderByDescending(x => x.TransactionDate)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Select(x => x.Id)
+            .FirstOrDefault();
+
+        var isLatest = latestTransactionId == transaction.Id;
+        var normalizedType = NormalizeType(string.IsNullOrWhiteSpace(_editingTransaction.Type) ? transaction.Type : _editingTransaction.Type);
+        var normalizedDate = _editingTransaction.TransactionDate ?? transaction.TransactionDate;
+
+        if (!isLatest)
+        {
+            if (_editingTransaction.Amount != transaction.Amount)
+            {
+                Snackbar.Add("Amount can only be changed on the latest transaction.", Severity.Warning);
+                return;
+            }
+
+            if (normalizedDate != transaction.TransactionDate)
+            {
+                Snackbar.Add("Transaction date can only be changed on the latest transaction.", Severity.Warning);
+                return;
+            }
+
+            if (!string.Equals(normalizedType, transaction.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                Snackbar.Add("Type can only be changed on the latest transaction.", Severity.Warning);
+                return;
+            }
+        }
+
+        var validTagIds = await DbContext.Tags
+            .Where(x => x.HouseholdId == account.HouseholdId && _editingSelectedTagIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        var utcNow = DateTime.UtcNow;
+        transaction.Description = _editingTransaction.Description.Trim();
+        transaction.Category = string.IsNullOrWhiteSpace(_editingTransaction.Category) ? "General" : _editingTransaction.Category.Trim();
+        transaction.UpdatedAt = utcNow;
+
+        dbContextUpdateTagLinks(transaction, validTagIds);
+
+        if (isLatest)
+        {
+            transaction.Amount = _editingTransaction.Amount;
+            transaction.Type = normalizedType;
+            transaction.TransactionDate = normalizedDate;
+
+            var updatedSnapshots = originalSnapshots
+                .Select(x => x.Id == transaction.Id
+                    ? x with
+                    {
+                        Amount = transaction.Amount,
+                        Type = transaction.Type,
+                        TransactionDate = transaction.TransactionDate
+                    }
+                    : x)
+                .ToList();
+
+            var initialBalance = account.CurrentBalance - originalSnapshots.Sum(x => GetDelta(x.Amount, x.Type));
+            var runningBalance = initialBalance;
+            var trackedById = accountTransactions.ToDictionary(x => x.Id);
+
+            foreach (var snapshot in updatedSnapshots
+                .OrderBy(x => x.TransactionDate)
+                .ThenBy(x => x.CreatedAt)
+                .ThenBy(x => x.Id))
+            {
+                runningBalance += GetDelta(snapshot.Amount, snapshot.Type);
+                var trackedTransaction = trackedById[snapshot.Id];
+                trackedTransaction.BalanceAfterTransaction = runningBalance;
+                trackedTransaction.UpdatedAt = utcNow;
+            }
+
+            account.CurrentBalance = runningBalance;
+            account.UpdatedAt = utcNow;
+        }
+
+        await DbContext.SaveChangesAsync();
+
+        Snackbar.Add("Transaction updated.", Severity.Success);
+        await CancelEditAsync();
+        await LoadAsync();
+    }
+
+    private void dbContextUpdateTagLinks(Treasury.App.Domain.Transaction transaction, List<Guid> validTagIds)
+    {
+        DbContext.TransactionTags.RemoveRange(transaction.TransactionTags);
+        transaction.TransactionTags.Clear();
+
+        foreach (var tagId in validTagIds)
+        {
+            transaction.TransactionTags.Add(new Treasury.App.Domain.TransactionTag
+            {
+                Transaction = transaction,
+                TagId = tagId
+            });
+        }
+    }
+
     private string GetAccountName(Guid accountId)
     {
         // Use the full visible accounts collection so historical transactions from inactive accounts still show a name
         return _visibleAccounts.FirstOrDefault(x => x.Id == accountId)?.Name ?? "Unknown account";
+    }
+
+    private bool IsLatestTransaction(Treasury.App.Domain.Transaction transaction)
+    {
+        var latestTransaction = _transactions
+            .Where(x => x.AccountId == transaction.AccountId)
+            .OrderByDescending(x => x.TransactionDate)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+
+        return latestTransaction?.Id == transaction.Id;
+    }
+
+    private static string NormalizeType(string type) =>
+        string.IsNullOrWhiteSpace(type) ? "expense" : type.Trim().ToLowerInvariant();
+
+    private static decimal GetDelta(decimal amount, string type)
+    {
+        var normalizedType = NormalizeType(type);
+        return normalizedType switch
+        {
+            "expense" => -Math.Abs(amount),
+            "income" => Math.Abs(amount),
+            "transfer" => Math.Abs(amount),
+            "transfer-in" => Math.Abs(amount),
+            "transfer-out" => -Math.Abs(amount),
+            _ => amount
+        };
     }
 
     private sealed class NewTransactionForm
@@ -284,4 +578,18 @@
         public string Type { get; set; } = "expense";
         public DateTime? TransactionDate { get; set; } = DateTime.UtcNow;
     }
+
+    private sealed class EditingTransactionForm
+    {
+        public Guid Id { get; set; }
+        public Guid AccountId { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public string Category { get; set; } = "General";
+        public decimal Amount { get; set; }
+        public string Type { get; set; } = "expense";
+        public DateTime? TransactionDate { get; set; } = DateTime.UtcNow;
+        public bool IsLatest { get; set; }
+    }
+
+    private sealed record TransactionBalanceSnapshot(Guid Id, decimal Amount, string Type, DateTime TransactionDate, DateTime CreatedAt);
 }

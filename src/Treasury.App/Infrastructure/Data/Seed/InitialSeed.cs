@@ -114,6 +114,7 @@ public static class InitialSeed
                         Currency = "PLN",
                         Type = "income",
                         TransactionDate = DateTime.UtcNow.AddDays(-2),
+                        BalanceAfterTransaction = 13320.90m,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     },
@@ -127,6 +128,7 @@ public static class InitialSeed
                         Currency = "PLN",
                         Type = "expense",
                         TransactionDate = DateTime.UtcNow.AddDays(-1),
+                        BalanceAfterTransaction = 12840.58m,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     },
@@ -140,6 +142,7 @@ public static class InitialSeed
                         Currency = "PLN",
                         Type = "transfer",
                         TransactionDate = DateTime.UtcNow.AddDays(-3),
+                        BalanceAfterTransaction = 9120.90m,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     });

@@ -42,6 +42,8 @@ public sealed class GetAccountTransactionsEndpoint(TreasuryDbContext db, UserMan
         var transactions = await db.Transactions
             .Where(x => x.HouseholdId == user.HouseholdId && x.AccountId == request.Id)
             .OrderByDescending(x => x.TransactionDate)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
             .Select(x => new
             {
                 x.Id,
@@ -51,7 +53,8 @@ public sealed class GetAccountTransactionsEndpoint(TreasuryDbContext db, UserMan
                 x.Amount,
                 x.Currency,
                 x.Type,
-                x.TransactionDate
+                x.TransactionDate,
+                x.BalanceAfterTransaction
             })
             .ToListAsync(ct);
 

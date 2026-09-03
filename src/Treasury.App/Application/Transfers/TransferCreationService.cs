@@ -151,6 +151,8 @@ public class TransferCreationService(TreasuryDbContext db)
 
         fromAccount.CurrentBalance -= Math.Abs(request.Amount);
         toAccount.CurrentBalance += Math.Abs(request.Amount);
+        outflow.BalanceAfterTransaction = fromAccount.CurrentBalance;
+        inflow.BalanceAfterTransaction = toAccount.CurrentBalance;
         fromAccount.UpdatedAt = utcNow;
         toAccount.UpdatedAt = utcNow;
 
