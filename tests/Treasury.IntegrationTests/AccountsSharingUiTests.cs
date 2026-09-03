@@ -65,6 +65,8 @@ public class AccountsSharingUiTests
         body.Should().Contain("Share with household user");
         body.Should().Contain("Share read-only");
         body.Should().NotContain(ownerEmail);
+        // Explicit picker exclusion check — the owner's email should not appear as a selectable household option
+        body.Should().NotContain($"<option value=\"{ownerEmail}\"");
 
         // No manual email-entry should be present for household sharing
         body.Should().NotContain("input type=\"email\"");

@@ -66,6 +66,17 @@ public class SharedReadOnlyUiPermissionTests
         });
 
         postTransaction.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // Additional guard: shared users must not be able to update account metadata
+        var putAccount = await sharedClient.PutAsJsonAsync($"/api/accounts/{accountId}", new
+        {
+            Name = "Malicious rename",
+            Currency = "PLN",
+            AccountType = "cash-wallet"
+        });
+
+        // Expect that the mutation is not allowed — either Forbidden or NotFound depending on routing
+        putAccount.IsSuccessStatusCode.Should().BeFalse();
     }
 
     private static async Task RegisterAndSignInAsync(HttpClient client, string email, string password)
