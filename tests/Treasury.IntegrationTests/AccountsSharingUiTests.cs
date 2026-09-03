@@ -39,7 +39,7 @@ public class AccountsSharingUiTests
         });
         accountResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var accountJson = JsonDocument.Parse(await accountResponse.Content.ReadAsStringAsync());
+        using var accountJson = JsonDocument.Parse(await accountResponse.Content.ReadAsStringAsync());
         var accountId = accountJson.RootElement.GetProperty("id").GetGuid();
 
         var shareResponse = await ownerClient.PostAsJsonAsync($"/api/accounts/{accountId}/share-readonly", new
@@ -48,14 +48,27 @@ public class AccountsSharingUiTests
         });
         shareResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
+        // Owner's accounts page should show shared-user and (eventually) a household picker in the UI
         var pageResponse = await ownerClient.GetAsync("/accounts");
         pageResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await pageResponse.Content.ReadAsStringAsync();
+        // Core expectations preserved from the brief
         body.Should().Contain("Shared with:");
         body.Should().Contain(sharedEmail);
         body.Should().Contain("Share read-only");
         body.Should().NotContain(ownerEmail);
+
+        // Stronger UX expectations (keeps test failing until UI implements picker semantics)
+        body.Should().Contain("Household");
+
+        // Verify shared user can see the shared account but does not see owner-only share controls
+        var sharedPageResponse = await sharedClient.GetAsync("/accounts");
+        sharedPageResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var sharedBody = await sharedPageResponse.Content.ReadAsStringAsync();
+        sharedBody.Should().Contain("Shared account");
+        // Shared users should not see the 'Share read-only' control for accounts they only have read access to
+        sharedBody.Should().NotContain("Share read-only");
     }
 
     private static async Task RegisterAndSignInAsync(HttpClient client, string email, string password)
