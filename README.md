@@ -59,6 +59,6 @@ API equivalents:
 
 - Inactive accounts are hidden by default and blocked from creating new transfers or transactions.
 - Transfers page (UI): `/transfers` — use this page to create and view transfer records between accounts.
-- Transaction editing rule: only the latest transaction on an account may change amount, date, or type; older transactions are immutable except for tagging/notes.
+- Transaction editing rule: only the latest transaction on an account may change amount, date, or type; older transactions may only have description, category, and tags edited.
 
 Operator guidance above reflects Phase 2 lifecycle and is enforced by acceptance/domain rules and integration tests.
