@@ -52,14 +52,84 @@ public class TransfersWorkflowTests
 
         outflow.AccountId.Should().Be(fromAccountId);
         outflow.Type.Should().Be("transfer-out");
+        outflow.BalanceAfterTransaction.Should().Be(-25.50m);
         inflow.AccountId.Should().Be(toAccountId);
         inflow.Type.Should().Be("transfer-in");
+        inflow.BalanceAfterTransaction.Should().Be(25.50m);
 
         var fromAccount = await db.Accounts.SingleAsync(x => x.Id == fromAccountId);
         var toAccount = await db.Accounts.SingleAsync(x => x.Id == toAccountId);
 
         fromAccount.CurrentBalance.Should().Be(-25.50m);
         toAccount.CurrentBalance.Should().Be(25.50m);
+    }
+
+    [Fact]
+    public async Task Backdated_Transfer_Recomputes_Both_Account_Balances()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var fromAccountId = await CreateAccountAsync(client, "Backdated from");
+        var toAccountId = await CreateAccountAsync(client, "Backdated to");
+
+        var fromIncomeResponse = await client.PostAsJsonAsync("/api/transactions", new
+        {
+            AccountId = fromAccountId,
+            Description = "Later income",
+            Category = "General",
+            Amount = 100m,
+            Currency = "PLN",
+            Type = "income",
+            TransactionDate = DateTime.UtcNow.AddDays(-1)
+        });
+        fromIncomeResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var toIncomeResponse = await client.PostAsJsonAsync("/api/transactions", new
+        {
+            AccountId = toAccountId,
+            Description = "Later income",
+            Category = "General",
+            Amount = 50m,
+            Currency = "PLN",
+            Type = "income",
+            TransactionDate = DateTime.UtcNow.AddDays(-1)
+        });
+        toIncomeResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var response = await client.PostAsJsonAsync("/api/transfers", new
+        {
+            FromAccountId = fromAccountId,
+            ToAccountId = toAccountId,
+            Amount = 20m,
+            Currency = "PLN",
+            Description = "Backdated transfer",
+            TransferDate = DateTime.UtcNow.AddDays(-3)
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var outflowTransactionId = payload.RootElement.GetProperty("outflowTransactionId").GetGuid();
+        var inflowTransactionId = payload.RootElement.GetProperty("inflowTransactionId").GetGuid();
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TreasuryDbContext>();
+
+        var outflow = await db.Transactions.SingleAsync(x => x.Id == outflowTransactionId);
+        var inflow = await db.Transactions.SingleAsync(x => x.Id == inflowTransactionId);
+        var fromLater = await db.Transactions.SingleAsync(x => x.AccountId == fromAccountId && x.Description == "Later income");
+        var toLater = await db.Transactions.SingleAsync(x => x.AccountId == toAccountId && x.Description == "Later income");
+        var fromAccount = await db.Accounts.SingleAsync(x => x.Id == fromAccountId);
+        var toAccount = await db.Accounts.SingleAsync(x => x.Id == toAccountId);
+
+        outflow.BalanceAfterTransaction.Should().Be(-20m);
+        inflow.BalanceAfterTransaction.Should().Be(20m);
+        fromLater.BalanceAfterTransaction.Should().Be(80m);
+        toLater.BalanceAfterTransaction.Should().Be(70m);
+        fromAccount.CurrentBalance.Should().Be(80m);
+        toAccount.CurrentBalance.Should().Be(70m);
     }
 
     [Fact]

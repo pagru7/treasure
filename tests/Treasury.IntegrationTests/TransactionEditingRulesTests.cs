@@ -46,6 +46,44 @@ public class TransactionEditingRulesTests
     }
 
     [Fact]
+    public async Task Create_Backdated_Transaction_Recomputes_Later_Balances()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var accountId = await CreateAccountAsync(client, "Backdated balance");
+
+        var laterTransactionId = await CreateTransactionAsync(client, accountId, "Later income", 100m, "income", DateTime.UtcNow.AddDays(-1));
+
+        var earlierResponse = await client.PostAsJsonAsync("/api/transactions", new
+        {
+            AccountId = accountId,
+            Description = "Earlier expense",
+            Category = "General",
+            Amount = 25m,
+            Currency = "PLN",
+            Type = "expense",
+            TransactionDate = DateTime.UtcNow.AddDays(-3)
+        });
+
+        earlierResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        using var earlierPayload = JsonDocument.Parse(await earlierResponse.Content.ReadAsStringAsync());
+        var earlierTransactionId = earlierPayload.RootElement.GetProperty("id").GetGuid();
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TreasuryDbContext>();
+
+        var earlierTransaction = await db.Transactions.SingleAsync(x => x.Id == earlierTransactionId);
+        var laterTransaction = await db.Transactions.SingleAsync(x => x.Id == laterTransactionId);
+        var account = await db.Accounts.SingleAsync(x => x.Id == accountId);
+
+        earlierTransaction.BalanceAfterTransaction.Should().Be(-25m);
+        laterTransaction.BalanceAfterTransaction.Should().Be(75m);
+        account.CurrentBalance.Should().Be(75m);
+    }
+
+    [Fact]
     public async Task Edit_NonLatest_Rejects_Amount_Date_Type_Changes()
     {
         await using var app = new TreasuryHostFactory();

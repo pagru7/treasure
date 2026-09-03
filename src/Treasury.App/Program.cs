@@ -97,6 +97,7 @@ builder.Services.AddMudServices();
 builder.Services.AddScoped<AccountSharingService>();
 builder.Services.AddScoped<TransferCreationService>();
 builder.Services.AddScoped<TransactionEditingService>();
+builder.Services.AddScoped<AccountBalanceRecalculationService>();
 
 var app = builder.Build();
 
@@ -114,6 +115,11 @@ using (var scope = app.Services.CreateScope())
     }
 
     await InitialSeed.SeedAsync(db);
+
+    // Recompute every account once at startup so any 0-default balance rows are repaired
+    // while preserving each account's opening balance baseline.
+    var balanceRecalculationService = scope.ServiceProvider.GetRequiredService<AccountBalanceRecalculationService>();
+    await balanceRecalculationService.RecalculateAllAccountsAsync(CancellationToken.None);
 }
 
 app.MapHealthChecks("/health");

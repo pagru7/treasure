@@ -1,13 +1,17 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Treasury.App.Application.Transactions;
 using Treasury.App.Contracts.Transactions;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
 namespace Treasury.App.Endpoints.Transactions;
 
-public sealed class CreateTransactionEndpoint(TreasuryDbContext db, UserManager<ApplicationUser> userManager)
+public sealed class CreateTransactionEndpoint(
+    TreasuryDbContext db,
+    UserManager<ApplicationUser> userManager,
+    AccountBalanceRecalculationService dbBalanceRecalculationService)
     : Endpoint<CreateTransactionRequest>
 {
     public override void Configure()
@@ -62,20 +66,8 @@ public sealed class CreateTransactionEndpoint(TreasuryDbContext db, UserManager<
             return;
         }
 
-        var normalizedType = (request.Type ?? "expense").Trim().ToLowerInvariant();
-        var delta = request.Amount;
-        if (normalizedType == "expense")
-        {
-            delta = -Math.Abs(request.Amount);
-        }
-        else if (normalizedType == "income")
-        {
-            delta = Math.Abs(request.Amount);
-        }
-        else if (normalizedType == "transfer")
-        {
-            delta = request.Amount;
-        }
+        var normalizedType = TransactionBalanceMath.NormalizeType(request.Type);
+        var delta = TransactionBalanceMath.GetDelta(request.Amount, normalizedType);
 
         var utcNow = DateTime.UtcNow;
         var transaction = new Transaction
@@ -106,11 +98,25 @@ public sealed class CreateTransactionEndpoint(TreasuryDbContext db, UserManager<
             });
         }
 
-        db.Transactions.Add(transaction);
-        account.CurrentBalance += delta;
-        transaction.BalanceAfterTransaction = account.CurrentBalance;
-        account.UpdatedAt = utcNow;
-        await db.SaveChangesAsync(ct);
+        async Task PersistAsync()
+        {
+            db.Transactions.Add(transaction);
+            account.CurrentBalance += delta;
+            account.UpdatedAt = utcNow;
+            await db.SaveChangesAsync(ct);
+            await dbBalanceRecalculationService.RecalculateAccountAsync(account.Id, ct);
+        }
+
+        if (db.Database.IsRelational())
+        {
+            await using var transactionScope = await db.Database.BeginTransactionAsync(ct);
+            await PersistAsync();
+            await transactionScope.CommitAsync(ct);
+        }
+        else
+        {
+            await PersistAsync();
+        }
 
         await SendAsync(new
         {

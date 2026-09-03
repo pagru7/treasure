@@ -4,6 +4,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject UserManager<ApplicationUser> UserManager
 @inject TransactionEditingService TransactionEditingService
+@inject AccountBalanceRecalculationService BalanceRecalculationService
 @inject ISnackbar Snackbar
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
@@ -351,8 +352,8 @@
             return;
         }
 
-        var normalizedType = NormalizeType(_newTransaction.Type);
-        var delta = GetDelta(_newTransaction.Amount, normalizedType);
+        var normalizedType = TransactionBalanceMath.NormalizeType(_newTransaction.Type);
+        var delta = TransactionBalanceMath.GetDelta(_newTransaction.Amount, normalizedType);
         var utcNow = DateTime.UtcNow;
 
         var transaction = new Treasury.App.Domain.Transaction
@@ -385,11 +386,25 @@
             });
         }
 
-        DbContext.Transactions.Add(transaction);
-        account.CurrentBalance += delta;
-        transaction.BalanceAfterTransaction = account.CurrentBalance;
-        account.UpdatedAt = utcNow;
-        await DbContext.SaveChangesAsync();
+        async Task PersistAsync()
+        {
+            DbContext.Transactions.Add(transaction);
+            account.CurrentBalance += delta;
+            account.UpdatedAt = utcNow;
+            await DbContext.SaveChangesAsync();
+            await BalanceRecalculationService.RecalculateAccountAsync(account.Id, CancellationToken.None);
+        }
+
+        if (DbContext.Database.IsRelational())
+        {
+            await using var transactionScope = await DbContext.Database.BeginTransactionAsync();
+            await PersistAsync();
+            await transactionScope.CommitAsync();
+        }
+        else
+        {
+            await PersistAsync();
+        }
 
         _newTransaction.Description = string.Empty;
         _newTransaction.Category = "General";
@@ -529,23 +544,6 @@
             .FirstOrDefault();
 
         return latestTransaction?.Id == transaction.Id;
-    }
-
-    private static string NormalizeType(string type) =>
-        string.IsNullOrWhiteSpace(type) ? "expense" : type.Trim().ToLowerInvariant();
-
-    private static decimal GetDelta(decimal amount, string type)
-    {
-        var normalizedType = NormalizeType(type);
-        return normalizedType switch
-        {
-            "expense" => -Math.Abs(amount),
-            "income" => Math.Abs(amount),
-            "transfer" => Math.Abs(amount),
-            "transfer-in" => Math.Abs(amount),
-            "transfer-out" => -Math.Abs(amount),
-            _ => amount
-        };
     }
 
     private sealed class NewTransactionForm

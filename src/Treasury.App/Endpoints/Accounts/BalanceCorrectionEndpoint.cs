@@ -1,6 +1,7 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Treasury.App.Application.Transactions;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
@@ -13,7 +14,10 @@ public sealed class BalanceCorrectionRouteRequest
     public string Description { get; set; } = "Balance correction";
 }
 
-public sealed class BalanceCorrectionEndpoint(TreasuryDbContext db, UserManager<ApplicationUser> userManager)
+public sealed class BalanceCorrectionEndpoint(
+    TreasuryDbContext db,
+    UserManager<ApplicationUser> userManager,
+    AccountBalanceRecalculationService balanceRecalculationService)
     : Endpoint<BalanceCorrectionRouteRequest>
 {
     public override void Configure()
@@ -44,9 +48,11 @@ public sealed class BalanceCorrectionEndpoint(TreasuryDbContext db, UserManager<
             return;
         }
 
+        var utcNow = DateTime.UtcNow;
         var delta = request.NewBalance - account.CurrentBalance;
+
         account.CurrentBalance = request.NewBalance;
-        account.UpdatedAt = DateTime.UtcNow;
+        account.UpdatedAt = utcNow;
 
         db.Transactions.Add(new Transaction
         {
@@ -57,12 +63,27 @@ public sealed class BalanceCorrectionEndpoint(TreasuryDbContext db, UserManager<
             Amount = delta,
             Currency = account.Currency,
             Type = "balance-correction",
-            TransactionDate = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            TransactionDate = utcNow,
+            CreatedAt = utcNow,
+            UpdatedAt = utcNow
         });
 
-        await db.SaveChangesAsync(ct);
+        async Task PersistAsync()
+        {
+            await db.SaveChangesAsync(ct);
+            await balanceRecalculationService.RecalculateAccountAsync(account.Id, ct);
+        }
+
+        if (db.Database.IsRelational())
+        {
+            await using var transactionScope = await db.Database.BeginTransactionAsync(ct);
+            await PersistAsync();
+            await transactionScope.CommitAsync(ct);
+        }
+        else
+        {
+            await PersistAsync();
+        }
 
         await SendOkAsync(new
         {

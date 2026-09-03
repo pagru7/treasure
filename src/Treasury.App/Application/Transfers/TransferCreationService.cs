@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Treasury.App.Application.Transactions;
 using Treasury.App.Contracts.Transactions;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
@@ -44,7 +45,9 @@ public sealed record TransferCreationResult(
         new(status, message, issues, null);
 }
 
-public class TransferCreationService(TreasuryDbContext db)
+public class TransferCreationService(
+    TreasuryDbContext db,
+    AccountBalanceRecalculationService balanceRecalculationService)
 {
     public virtual async Task<TransferCreationResult> CreateAsync(
         ApplicationUser user,
@@ -149,10 +152,9 @@ public class TransferCreationService(TreasuryDbContext db)
             UpdatedAt = utcNow
         };
 
-        fromAccount.CurrentBalance -= Math.Abs(request.Amount);
-        toAccount.CurrentBalance += Math.Abs(request.Amount);
-        outflow.BalanceAfterTransaction = fromAccount.CurrentBalance;
-        inflow.BalanceAfterTransaction = toAccount.CurrentBalance;
+        var transferAmount = Math.Abs(request.Amount);
+        fromAccount.CurrentBalance -= transferAmount;
+        toAccount.CurrentBalance += transferAmount;
         fromAccount.UpdatedAt = utcNow;
         toAccount.UpdatedAt = utcNow;
 
@@ -166,6 +168,8 @@ public class TransferCreationService(TreasuryDbContext db)
             transfer.OutflowTransactionId = outflow.Id;
             transfer.InflowTransactionId = inflow.Id;
             await db.SaveChangesAsync(ct);
+
+            await balanceRecalculationService.RecalculateAccountsAsync([fromAccount.Id, toAccount.Id], ct);
         }
 
         if (db.Database.IsRelational())

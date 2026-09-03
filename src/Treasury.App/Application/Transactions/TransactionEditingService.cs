@@ -46,7 +46,9 @@ public sealed record TransactionEditResult(
         new(status, message, issues, null);
 }
 
-public class TransactionEditingService(TreasuryDbContext db)
+public class TransactionEditingService(
+    TreasuryDbContext db,
+    AccountBalanceRecalculationService balanceRecalculationService)
 {
     public virtual async Task<TransactionEditResult> UpdateAsync(
         ApplicationUser user,
@@ -90,22 +92,16 @@ public class TransactionEditingService(TreasuryDbContext db)
                 new TransactionEditIssue(nameof(UpdateTransactionRequest.Id), "Transfer-linked transactions cannot be edited. Edit the transfer instead."));
         }
 
-        var trackedTransactions = await db.Transactions
+        var latestTransactionId = await db.Transactions
             .Where(x => x.AccountId == account.Id)
-            .ToListAsync(ct);
-
-        var originalSnapshots = trackedTransactions
-            .Select(x => new TransactionBalanceSnapshot(x.Id, x.Amount, x.Type, x.TransactionDate, x.CreatedAt))
-            .ToList();
-
-        var latestTransactionId = originalSnapshots
             .OrderByDescending(x => x.TransactionDate)
             .ThenByDescending(x => x.CreatedAt)
             .ThenByDescending(x => x.Id)
             .Select(x => x.Id)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync(ct);
 
         var isLatest = latestTransactionId == transaction.Id;
+        var originalDelta = TransactionBalanceMath.GetDelta(transaction.Amount, transaction.Type);
 
         var hasDescription = request.Description is not null;
         var hasCategory = request.Category is not null;
@@ -117,7 +113,7 @@ public class TransactionEditingService(TreasuryDbContext db)
         var normalizedDescription = hasDescription ? request.Description!.Trim() : transaction.Description;
         var normalizedCategory = hasCategory ? NormalizeCategory(request.Category!, transaction.Category) : transaction.Category;
         var normalizedAmount = hasAmount ? request.Amount!.Value : transaction.Amount;
-        var normalizedType = hasType ? NormalizeType(request.Type!, transaction.Type) : transaction.Type;
+        var normalizedType = hasType ? TransactionBalanceMath.NormalizeType(request.Type!, transaction.Type) : transaction.Type;
         var normalizedTransactionDate = hasTransactionDate ? request.TransactionDate!.Value : transaction.TransactionDate;
 
         var issues = new List<TransactionEditIssue>();
@@ -167,7 +163,20 @@ public class TransactionEditingService(TreasuryDbContext db)
         transaction.Amount = normalizedAmount;
         transaction.Type = normalizedType;
         transaction.TransactionDate = normalizedTransactionDate;
-        transaction.UpdatedAt = DateTime.UtcNow;
+        var utcNow = DateTime.UtcNow;
+        transaction.UpdatedAt = utcNow;
+
+        var updatedDelta = TransactionBalanceMath.GetDelta(transaction.Amount, transaction.Type);
+
+        if (amountChanged || typeChanged)
+        {
+            account.CurrentBalance += updatedDelta - originalDelta;
+            account.UpdatedAt = utcNow;
+        }
+        else if (dateChanged)
+        {
+            account.UpdatedAt = utcNow;
+        }
 
         if (hasTagIds)
         {
@@ -190,40 +199,22 @@ public class TransactionEditingService(TreasuryDbContext db)
             }
         }
 
-        if (isLatest && (amountChanged || typeChanged || dateChanged))
+        async Task PersistAsync()
         {
-            var updatedSnapshots = originalSnapshots
-                .Select(x => x.Id == transaction.Id
-                    ? x with
-                    {
-                        Amount = transaction.Amount,
-                        Type = transaction.Type,
-                        TransactionDate = transaction.TransactionDate
-                    }
-                    : x)
-                .ToList();
-
-            var initialBalance = account.CurrentBalance - originalSnapshots.Sum(x => GetDelta(x.Amount, x.Type));
-            var runningBalance = initialBalance;
-            var utcNow = DateTime.UtcNow;
-            var trackedById = trackedTransactions.ToDictionary(x => x.Id);
-
-            foreach (var snapshot in updatedSnapshots
-                .OrderBy(x => x.TransactionDate)
-                .ThenBy(x => x.CreatedAt)
-                .ThenBy(x => x.Id))
-            {
-                runningBalance += GetDelta(snapshot.Amount, snapshot.Type);
-                var trackedTransaction = trackedById[snapshot.Id];
-                trackedTransaction.BalanceAfterTransaction = runningBalance;
-                trackedTransaction.UpdatedAt = utcNow;
-            }
-
-            account.CurrentBalance = runningBalance;
-            account.UpdatedAt = utcNow;
+            await db.SaveChangesAsync(ct);
+            await balanceRecalculationService.RecalculateAccountAsync(account.Id, ct);
         }
 
-        await db.SaveChangesAsync(ct);
+        if (db.Database.IsRelational())
+        {
+            await using var transactionScope = await db.Database.BeginTransactionAsync(ct);
+            await PersistAsync();
+            await transactionScope.CommitAsync(ct);
+        }
+        else
+        {
+            await PersistAsync();
+        }
 
         var tagIds = transaction.TransactionTags
             .Select(x => x.TagId)
@@ -248,25 +239,6 @@ public class TransactionEditingService(TreasuryDbContext db)
             x => x.OutflowTransactionId == transaction.Id || x.InflowTransactionId == transaction.Id,
             ct);
 
-    private static string NormalizeType(string? type, string fallback) =>
-        string.IsNullOrWhiteSpace(type) ? fallback : type.Trim().ToLowerInvariant();
-
     private static string NormalizeCategory(string category, string fallback) =>
         string.IsNullOrWhiteSpace(category) ? fallback : category.Trim();
-
-    private static decimal GetDelta(decimal amount, string type)
-    {
-        var normalizedType = NormalizeType(type, "expense");
-        return normalizedType switch
-        {
-            "expense" => -Math.Abs(amount),
-            "income" => Math.Abs(amount),
-            "transfer" => Math.Abs(amount),
-            "transfer-in" => Math.Abs(amount),
-            "transfer-out" => -Math.Abs(amount),
-            _ => amount
-        };
-    }
-
-    private sealed record TransactionBalanceSnapshot(Guid Id, decimal Amount, string Type, DateTime TransactionDate, DateTime CreatedAt);
 }
