@@ -1,8 +1,7 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Treasury.App.Domain;
-using Treasury.App.Infrastructure.Data;
+using Treasury.App.Application.Accounts;
 
 namespace Treasury.App.Endpoints.Accounts;
 
@@ -12,7 +11,7 @@ public sealed class ShareAccountReadOnlyRouteRequest
     public string Email { get; set; } = string.Empty;
 }
 
-public sealed class ShareAccountReadOnlyEndpoint(TreasuryDbContext db, UserManager<ApplicationUser> userManager)
+public sealed class ShareAccountReadOnlyEndpoint(AccountSharingService accountSharingService, UserManager<ApplicationUser> userManager)
     : Endpoint<ShareAccountReadOnlyRouteRequest>
 {
     public override void Configure()
@@ -30,64 +29,29 @@ public sealed class ShareAccountReadOnlyEndpoint(TreasuryDbContext db, UserManag
             return;
         }
 
-        var email = request.Email?.Trim();
-        if (string.IsNullOrWhiteSpace(email))
+        var result = await accountSharingService.ShareReadOnlyAsync(user, request.Id, request.Email, ct);
+        if (!result.Succeeded)
         {
-            AddError(x => x.Email, "Viewer email is required.");
-            await SendErrorsAsync(cancellation: ct);
-            return;
-        }
-
-        var account = await db.Accounts.SingleOrDefaultAsync(x => x.Id == request.Id && x.HouseholdId == user.HouseholdId, ct);
-        if (account is null)
-        {
-            await SendNotFoundAsync(ct);
-            return;
-        }
-
-        if (account.OwnerUserId != user.Id)
-        {
-            await SendForbiddenAsync(ct);
-            return;
-        }
-
-        var viewer = await userManager.FindByEmailAsync(email);
-        if (viewer is null || viewer.HouseholdId != user.HouseholdId)
-        {
-            AddError(x => x.Email, "Viewer must be an existing user from the same household.");
-            await SendErrorsAsync(cancellation: ct);
-            return;
-        }
-
-        if (viewer.Id == user.Id)
-        {
-            AddError(x => x.Email, "You already own this account.");
-            await SendErrorsAsync(cancellation: ct);
-            return;
-        }
-
-        var existingRule = await db.VisibilityRules.SingleOrDefaultAsync(x => x.AccountId == account.Id && x.ViewerUserId == viewer.Id, ct);
-        if (existingRule is null)
-        {
-            db.VisibilityRules.Add(new VisibilityRule
+            if (result.ErrorMessage == "Account not found.")
             {
-                AccountId = account.Id,
-                ViewerUserId = viewer.Id,
-                IsReadOnly = true,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-        else
-        {
-            existingRule.IsReadOnly = true;
-        }
+                await SendNotFoundAsync(ct);
+                return;
+            }
 
-        await db.SaveChangesAsync(ct);
+            if (result.ErrorMessage == "Only the owner can share this account.")
+            {
+                await SendForbiddenAsync(ct);
+                return;
+            }
+
+            AddError(x => x.Email, result.ErrorMessage ?? "Unable to share this account.");
+            await SendErrorsAsync(cancellation: ct);
+            return;
+        }
 
         await SendOkAsync(new
         {
-            AccountId = account.Id,
-            ViewerUserId = viewer.Id,
+            AccountId = request.Id,
             IsReadOnly = true
         }, ct);
     }

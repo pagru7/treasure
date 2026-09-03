@@ -1,7 +1,5 @@
 @page "/accounts"
 @attribute [Authorize]
-@inject TreasuryDbContext DbContext
-@inject ISnackbar Snackbar
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
     <MudStack Spacing="3">
@@ -60,6 +58,47 @@
                             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@account.AccountType</MudText>
                             <MudDivider Class="my-3" />
                             <MudText Typo="Typo.h5">@account.CurrentBalance.ToString("N2") @account.Currency</MudText>
+
+                            @if (account.IsOwner)
+                            {
+                                <MudDivider Class="my-3" />
+                                <MudText Typo="Typo.subtitle2">Shared with:</MudText>
+                                @if (account.SharedWith.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Nobody yet.</MudText>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var viewer in account.SharedWith)
+                                        {
+                                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">@viewer.DisplayName</MudChip>
+                                        }
+                                    </div>
+                                }
+
+                                @if (_householdUsers.Count == 0)
+                                {
+                                    <MudAlert Class="mt-3" Severity="Severity.Info">No other household users are available to share with.</MudAlert>
+                                }
+                                else
+                                {
+                                    <MudSelect T="string" Class="mt-3" Label="Share with household user" @bind-Value="account.SelectedShareEmail">
+                                        @foreach (var user in _householdUsers)
+                                        {
+                                            <MudSelectItem Value="@user.Email">@user.DisplayName</MudSelectItem>
+                                        }
+                                    </MudSelect>
+
+                                    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Tertiary" OnClick="() => ShareAccountAsync(account)">
+                                        Share read-only
+                                    </MudButton>
+                                }
+                            }
+                            else
+                            {
+                                <MudAlert Class="mt-3" Severity="Severity.Info">Read-only shared account.</MudAlert>
+                            }
                         </MudPaper>
                     </MudItem>
                 }
@@ -67,77 +106,3 @@
         }
     </MudStack>
 </MudContainer>
-
-@code {
-    private List<Treasury.App.Domain.Account> _accounts = new();
-    private bool _showCreateForm;
-    private readonly NewAccountForm _newAccount = new();
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAccountsAsync();
-    }
-
-    private async Task LoadAccountsAsync()
-    {
-        _accounts = await DbContext.Accounts.OrderBy(x => x.Name).ToListAsync();
-    }
-
-    private void ToggleCreateForm()
-    {
-        _showCreateForm = !_showCreateForm;
-        if (!_showCreateForm)
-        {
-            _newAccount.Name = string.Empty;
-            _newAccount.Currency = "PLN";
-            _newAccount.AccountType = "cash-wallet";
-            _newAccount.InitialBalance = 0m;
-        }
-    }
-
-    private async Task CreateAccountAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_newAccount.Name))
-        {
-            Snackbar.Add("Account name is required.", Severity.Warning);
-            return;
-        }
-
-        var householdId = await DbContext.Households
-            .OrderBy(x => x.Id)
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync();
-
-        var account = new Treasury.App.Domain.Account
-        {
-            HouseholdId = householdId == Guid.Empty ? Guid.Parse("11111111-1111-1111-1111-111111111111") : householdId,
-            OwnerUserId = string.Empty,
-            Name = _newAccount.Name.Trim(),
-            Currency = string.IsNullOrWhiteSpace(_newAccount.Currency) ? "PLN" : _newAccount.Currency.Trim().ToUpperInvariant(),
-            AccountType = string.IsNullOrWhiteSpace(_newAccount.AccountType) ? "cash-wallet" : _newAccount.AccountType.Trim(),
-            CurrentBalance = _newAccount.InitialBalance,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        DbContext.Accounts.Add(account);
-        await DbContext.SaveChangesAsync();
-
-        _showCreateForm = false;
-        _newAccount.Name = string.Empty;
-        _newAccount.Currency = "PLN";
-        _newAccount.AccountType = "cash-wallet";
-        _newAccount.InitialBalance = 0m;
-
-        Snackbar.Add("Account created.", Severity.Success);
-        await LoadAccountsAsync();
-    }
-
-    private sealed class NewAccountForm
-    {
-        public string Name { get; set; } = string.Empty;
-        public string Currency { get; set; } = "PLN";
-        public string AccountType { get; set; } = "cash-wallet";
-        public decimal InitialBalance { get; set; }
-    }
-}
