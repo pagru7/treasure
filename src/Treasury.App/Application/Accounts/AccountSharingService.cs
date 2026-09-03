@@ -13,9 +13,13 @@ public sealed record ShareReadOnlyResult(bool Succeeded, string? ErrorMessage);
 public class AccountSharingService(TreasuryDbContext db, UserManager<ApplicationUser> userManager)
 {
     public virtual Task<List<Account>> GetVisibleAccountsAsync(ApplicationUser user, CancellationToken ct) =>
+        GetVisibleAccountsAsync(user, includeInactive: false, ct);
+
+    public virtual Task<List<Account>> GetVisibleAccountsAsync(ApplicationUser user, bool includeInactive, CancellationToken ct) =>
         db.Accounts
             .Where(x =>
                 x.HouseholdId == user.HouseholdId
+                && (includeInactive || x.IsActive)
                 && (x.OwnerUserId == user.Id
                     || x.OwnerUserId == "seed"
                     || x.VisibilityRules.Any(v => v.ViewerUserId == user.Id)))

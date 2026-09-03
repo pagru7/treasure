@@ -53,6 +53,14 @@ public class TreasuryDbContext : IdentityDbContext<ApplicationUser>
             .HasOne(x => x.Tag)
             .WithMany(x => x.TransactionTags)
             .HasForeignKey(x => x.TagId);
+
+        modelBuilder.Entity<Account>()
+            .Property(x => x.IsActive)
+            .HasDefaultValue(true);
+
+        modelBuilder.Entity<Account>()
+            .Property(x => x.BankAccountNumber)
+            .HasMaxLength(34);
     }
 
     public DbSet<Household> Households => Set<Household>();

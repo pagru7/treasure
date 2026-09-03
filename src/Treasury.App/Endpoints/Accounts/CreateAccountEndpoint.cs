@@ -1,6 +1,7 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Treasury.App.Application.Accounts;
 using Treasury.App.Contracts.Accounts;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
@@ -41,6 +42,13 @@ public sealed class CreateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
             return;
         }
 
+        if (!AccountLifecycleValidation.TryNormalizeOptionalBankAccountNumber(request.BankAccountNumber, out var bankAccountNumber, out var bankAccountNumberError))
+        {
+            AddError(x => x.BankAccountNumber, bankAccountNumberError!);
+            await SendErrorsAsync(cancellation: ct);
+            return;
+        }
+
         var account = new Account
         {
             HouseholdId = user.HouseholdId,
@@ -48,6 +56,7 @@ public sealed class CreateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
             Name = request.Name.Trim(),
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "PLN" : request.Currency.Trim().ToUpperInvariant(),
             AccountType = accountType,
+            BankAccountNumber = bankAccountNumber,
             CurrentBalance = 0m
         };
 
@@ -60,6 +69,8 @@ public sealed class CreateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
             Name = account.Name,
             Currency = account.Currency,
             AccountType = account.AccountType,
+            IsActive = account.IsActive,
+            BankAccountNumber = account.BankAccountNumber,
             CurrentBalance = account.CurrentBalance,
             IsReadOnly = false
         };

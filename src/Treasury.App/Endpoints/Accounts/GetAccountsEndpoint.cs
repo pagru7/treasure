@@ -7,7 +7,12 @@ using Treasury.App.Infrastructure.Data;
 
 namespace Treasury.App.Endpoints.Accounts;
 
-public sealed class GetAccountsEndpoint(TreasuryDbContext db, UserManager<ApplicationUser> userManager) : EndpointWithoutRequest
+public sealed class GetAccountsRequest
+{
+    public bool IncludeInactive { get; set; }
+}
+
+public sealed class GetAccountsEndpoint(TreasuryDbContext db, UserManager<ApplicationUser> userManager) : Endpoint<GetAccountsRequest>
 {
     public override void Configure()
     {
@@ -15,7 +20,7 @@ public sealed class GetAccountsEndpoint(TreasuryDbContext db, UserManager<Applic
         Policies(global::Treasury.App.Infrastructure.Auth.Policies.SharedReadOnly);
     }
 
-    public override async Task HandleAsync(CancellationToken ct)
+    public override async Task HandleAsync(GetAccountsRequest request, CancellationToken ct)
     {
         var user = await userManager.GetUserAsync(User);
         if (user is null)
@@ -27,6 +32,7 @@ public sealed class GetAccountsEndpoint(TreasuryDbContext db, UserManager<Applic
         var accounts = await db.Accounts
             .Where(x =>
                 x.HouseholdId == user.HouseholdId
+                && (request.IncludeInactive || x.IsActive)
                 && (x.OwnerUserId == user.Id
                     || x.OwnerUserId == "seed"
                     || x.VisibilityRules.Any(v => v.ViewerUserId == user.Id)))
@@ -37,6 +43,8 @@ public sealed class GetAccountsEndpoint(TreasuryDbContext db, UserManager<Applic
                 Name = x.Name,
                 Currency = x.Currency,
                 AccountType = x.AccountType,
+                IsActive = x.IsActive,
+                BankAccountNumber = x.BankAccountNumber,
                 CurrentBalance = x.CurrentBalance,
                 IsReadOnly = x.OwnerUserId != user.Id
             })

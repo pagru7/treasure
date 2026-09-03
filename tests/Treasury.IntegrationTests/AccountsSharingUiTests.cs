@@ -202,6 +202,9 @@ public class AccountsSharingUiTests
                 }
             });
 
+        public override Task<List<Account>> GetVisibleAccountsAsync(ApplicationUser user, bool includeInactive, CancellationToken ct) =>
+            GetVisibleAccountsAsync(user, ct);
+
         public override Task<List<HouseholdUserChoice>> GetHouseholdUsersAsync(ApplicationUser user, CancellationToken ct) =>
             throw new InvalidOperationException("household users query failed");
 
@@ -232,6 +235,9 @@ public class AccountsSharingUiTests
                     CurrentBalance = 12.34m
                 }
             });
+
+        public override Task<List<Account>> GetVisibleAccountsAsync(ApplicationUser user, bool includeInactive, CancellationToken ct) =>
+            GetVisibleAccountsAsync(user, ct);
 
         public override Task<List<HouseholdUserChoice>> GetHouseholdUsersAsync(ApplicationUser user, CancellationToken ct) =>
             Task.FromResult(new List<HouseholdUserChoice>
@@ -272,6 +278,9 @@ public class AccountsSharingUiTests
                     CurrentBalance = 2m
                 }
             });
+
+        public override Task<List<Account>> GetVisibleAccountsAsync(ApplicationUser user, bool includeInactive, CancellationToken ct) =>
+            GetVisibleAccountsAsync(user, ct);
 
         public override Task<List<HouseholdUserChoice>> GetHouseholdUsersAsync(ApplicationUser user, CancellationToken ct) =>
             Task.FromResult(new List<HouseholdUserChoice>

@@ -5,7 +5,10 @@
     <MudStack Spacing="3">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
             <MudText Typo="Typo.h4">Accounts</MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.Add" OnClick="ToggleCreateForm">Add account</MudButton>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudSwitch T="bool" Label="Show inactive" checked="_showInactive" checkedChanged="OnShowInactiveChanged" />
+                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.Add" OnClick="ToggleCreateForm">Add account</MudButton>
+            </MudStack>
         </MudStack>
 
         @if (!string.IsNullOrWhiteSpace(_accountsLoadError))
@@ -24,6 +27,9 @@
                 <MudGrid>
                     <MudItem xs="12" md="4">
                         <MudTextField Label="Account name" @bind-Value="_newAccount.Name" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField Label="Bank account number (optional)" @bind-Value="_newAccount.BankAccountNumber" />
                     </MudItem>
                     <MudItem xs="12" md="3">
                         <MudSelect T="string" Label="Currency" @bind-Value="_newAccount.Currency">
@@ -66,11 +72,28 @@
                         <MudPaper Class="pa-4 rounded-xl" Elevation="2">
                             <MudText Typo="Typo.h6">@account.Name</MudText>
                             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@account.AccountType</MudText>
+                            @if (!string.IsNullOrWhiteSpace(account.BankAccountNumber))
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Bank account: @account.BankAccountNumber</MudText>
+                            }
+                            @if (!account.IsActive)
+                            {
+                                <MudChip Class="mt-2" T="string" Color="Color.Warning" Variant="Variant.Outlined">Inactive</MudChip>
+                            }
                             <MudDivider Class="my-3" />
                             <MudText Typo="Typo.h5">@account.CurrentBalance.ToString("N2") @account.Currency</MudText>
 
                             @if (account.IsOwner)
                             {
+                                <MudStack Row="true" Class="mt-4" Spacing="2" Wrap="Wrap.Wrap">
+                                    <MudButton Variant="Variant.Outlined" OnClick="() => ToggleActiveStateAsync(account)">
+                                        @(account.IsActive ? "Deactivate" : "Reactivate")
+                                    </MudButton>
+                                    <MudButton Color="Color.Error" Variant="Variant.Outlined" OnClick="() => DeleteAccountAsync(account)">
+                                        Remove
+                                    </MudButton>
+                                </MudStack>
+
                                 <MudDivider Class="my-3" />
                                 <MudText Typo="Typo.subtitle2">Shared with:</MudText>
                                 @if (account.SharedWithLoadFailed)
