@@ -54,6 +54,14 @@ public sealed class CreateTransactionEndpoint(TreasuryDbContext db, UserManager<
             return;
         }
 
+        // Block creating transactions on inactive accounts
+        if (!account.IsActive)
+        {
+            AddError(x => x.AccountId, "Cannot create transactions on an inactive account.");
+            await SendErrorsAsync(cancellation: ct);
+            return;
+        }
+
         var normalizedType = (request.Type ?? "expense").Trim().ToLowerInvariant();
         var delta = request.Amount;
         if (normalizedType == "expense")

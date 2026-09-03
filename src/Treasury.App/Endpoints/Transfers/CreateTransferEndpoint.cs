@@ -60,6 +60,23 @@ public sealed class CreateTransferEndpoint(TreasuryDbContext db, UserManager<App
             return;
         }
 
+        // Block transfers involving inactive accounts
+        if (!fromAccount.IsActive || !toAccount.IsActive)
+        {
+            if (!fromAccount.IsActive)
+            {
+                AddError(x => x.FromAccountId, "Source account is inactive.");
+            }
+
+            if (!toAccount.IsActive)
+            {
+                AddError(x => x.ToAccountId, "Destination account is inactive.");
+            }
+
+            await SendErrorsAsync(cancellation: ct);
+            return;
+        }
+
         var transferDate = request.TransferDate == default ? DateTime.UtcNow : request.TransferDate;
         var currency = string.IsNullOrWhiteSpace(request.Currency) ? fromAccount.Currency : request.Currency.Trim().ToUpperInvariant();
         var description = string.IsNullOrWhiteSpace(request.Description) ? "Account transfer" : request.Description.Trim();

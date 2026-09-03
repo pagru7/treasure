@@ -10,12 +10,19 @@
         <MudPaper Class="pa-4 rounded-xl" Elevation="2">
             <MudGrid>
                 <MudItem xs="12" md="3">
-                    <MudSelect T="string" Label="Account" @bind-Value="_newTransaction.AccountId" Required="true">
-                        @foreach (var account in _accounts)
-                        {
-                            <MudSelectItem Value="@account.Id.ToString()">@account.Name (@account.Currency)</MudSelectItem>
-                        }
-                    </MudSelect>
+                    @if (_accounts.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">No active accounts. Create or reactivate an account in the Accounts page.</MudText>
+                    }
+                    else
+                    {
+                        <MudSelect T="string" Label="Account" @bind-Value="_newTransaction.AccountId" Required="true">
+                            @foreach (var account in _accounts)
+                            {
+                                <MudSelectItem Value="@account.Id.ToString()">@account.Name (@account.Currency)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
                 </MudItem>
                 <MudItem xs="12" md="3">
                     <MudTextField Label="Description" @bind-Value="_newTransaction.Description" Required="true" />
@@ -124,7 +131,7 @@
     private async Task LoadAsync()
     {
         _accounts.Clear();
-        _accounts.AddRange(await DbContext.Accounts.OrderBy(x => x.Name).ToListAsync());
+        _accounts.AddRange(await DbContext.Accounts.Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync());
 
         _tags.Clear();
         _tags.AddRange(await DbContext.Tags.OrderBy(x => x.Name).ToListAsync());

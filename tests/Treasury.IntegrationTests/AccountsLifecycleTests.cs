@@ -97,6 +97,62 @@ public class AccountsLifecycleTests
         account.GetProperty("bankAccountNumber").GetString().Should().Be("12345678901234567890123456789012");
     }
 
+    [Fact]
+    public async Task Creating_Transaction_Blocks_Inactive_Account()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var accountId = await CreateAccountAsync(client, name: "Inactive account");
+
+        var deactivateResponse = await client.PutAsJsonAsync($"/api/accounts/{accountId}/active-state", new { IsActive = false });
+        deactivateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var txResponse = await client.PostAsJsonAsync("/api/transactions", new
+        {
+            AccountId = accountId,
+            Description = "Should be blocked",
+            Category = "General",
+            Amount = 10m,
+            Currency = "PLN",
+            Type = "expense",
+            TransactionDate = DateTime.UtcNow
+        });
+
+        txResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await txResponse.Content.ReadAsStringAsync();
+        body.Should().Contain("inactive");
+    }
+
+    [Fact]
+    public async Task Creating_Transfer_Blocks_Inactive_Source_Account()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var fromId = await CreateAccountAsync(client, name: "From");
+        var toId = await CreateAccountAsync(client, name: "To");
+
+        var deactivateResponse = await client.PutAsJsonAsync($"/api/accounts/{fromId}/active-state", new { IsActive = false });
+        deactivateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var transferResponse = await client.PostAsJsonAsync("/api/transfers", new
+        {
+            FromAccountId = fromId,
+            ToAccountId = toId,
+            Amount = 5m,
+            Currency = "PLN",
+            Description = "Blocked transfer",
+            TransferDate = DateTime.UtcNow
+        });
+
+        transferResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await transferResponse.Content.ReadAsStringAsync();
+        body.Should().Contain("inactive");
+    }
+
     private static HttpClient CreateAuthenticatedClient(TreasuryHostFactory app) =>
         app.CreateClient(new WebApplicationFactoryClientOptions
         {
