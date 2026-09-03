@@ -1,6 +1,9 @@
 @page "/transactions"
 @attribute [Authorize]
 @inject TreasuryDbContext DbContext
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject TransactionEditingService TransactionEditingService
 @inject ISnackbar Snackbar
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
@@ -183,11 +186,18 @@
                         <MudTd DataLabel="Amount">@context.Amount.ToString("N2") @context.Currency</MudTd>
                         <MudTd DataLabel="Date">@context.TransactionDate.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
                         <MudTd DataLabel="Actions">
-                            <MudButton Size="Size.Small"
-                                       Variant="Variant.Outlined"
-                                       OnClick="@(() => BeginEdit(context))">
-                                Edit
-                            </MudButton>
+                            <MudStack Spacing="0">
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Outlined"
+                                           Disabled="@(!CanEditTransaction(context))"
+                                           OnClick="@(() => BeginEdit(context))">
+                                    Edit
+                                </MudButton>
+                                @if (IsTransferLinked(context))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Warning">Transfer-linked</MudText>
+                                }
+                            </MudStack>
                         </MudTd>
                     </RowTemplate>
                 </MudTable>
@@ -204,21 +214,30 @@
     private readonly List<Treasury.App.Domain.Account> _visibleAccounts = new();
     private readonly List<Treasury.App.Domain.Tag> _tags = new();
     private readonly Dictionary<Guid, List<Treasury.App.Domain.Tag>> _transactionTags = new();
+    private readonly HashSet<Guid> _transferLinkedTransactionIds = new();
     private readonly HashSet<Guid> _selectedTagIds = new();
     private readonly HashSet<Guid> _editingSelectedTagIds = new();
 
     private readonly NewTransactionForm _newTransaction = new();
     private EditingTransactionForm? _editingTransaction;
+    private ApplicationUser? _currentUser;
 
     protected override async Task OnInitializedAsync()
     {
+        _currentUser = await GetCurrentUserAsync();
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _accounts.Clear();
-        _accounts.AddRange(await DbContext.Accounts.Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync());
+        if (_currentUser is not null)
+        {
+            _accounts.AddRange(await DbContext.Accounts
+                .Where(x => x.IsActive && x.OwnerUserId == _currentUser.Id)
+                .OrderBy(x => x.Name)
+                .ToListAsync());
+        }
 
         // Load full visible account list (includes inactive) so historical transactions still show account names
         _visibleAccounts.Clear();
@@ -226,6 +245,23 @@
 
         _tags.Clear();
         _tags.AddRange(await DbContext.Tags.OrderBy(x => x.Name).ToListAsync());
+
+        _transferLinkedTransactionIds.Clear();
+        var transferLinks = await DbContext.Transfers
+            .Select(x => new { x.OutflowTransactionId, x.InflowTransactionId })
+            .ToListAsync();
+        foreach (var link in transferLinks)
+        {
+            if (link.OutflowTransactionId.HasValue)
+            {
+                _transferLinkedTransactionIds.Add(link.OutflowTransactionId.Value);
+            }
+
+            if (link.InflowTransactionId.HasValue)
+            {
+                _transferLinkedTransactionIds.Add(link.InflowTransactionId.Value);
+            }
+        }
 
         _transactions.Clear();
         _transactions.AddRange(await DbContext.Transactions
@@ -251,6 +287,12 @@
         }
     }
 
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(authState.User);
+    }
+
     private void ToggleTag(Guid tagId, bool isSelected)
     {
         if (isSelected)
@@ -267,6 +309,13 @@
         if (_accounts.Count == 0)
         {
             Snackbar.Add("Create an account before adding transactions.", Severity.Warning);
+            return;
+        }
+
+        var currentUser = _currentUser ?? await GetCurrentUserAsync();
+        if (currentUser is null)
+        {
+            Snackbar.Add("You need to sign in again before adding transactions.", Severity.Error);
             return;
         }
 
@@ -293,6 +342,12 @@
         if (!account.IsActive)
         {
             Snackbar.Add("Selected account is inactive. Reactivate it before adding transactions.", Severity.Warning);
+            return;
+        }
+
+        if (account.OwnerUserId != currentUser.Id)
+        {
+            Snackbar.Add("You can only add transactions to your own accounts.", Severity.Warning);
             return;
         }
 
@@ -349,6 +404,12 @@
 
     private void BeginEdit(Treasury.App.Domain.Transaction transaction)
     {
+        if (!CanEditTransaction(transaction))
+        {
+            Snackbar.Add("Transfer-linked transactions and transactions from shared accounts cannot be edited here.", Severity.Warning);
+            return;
+        }
+
         _editingTransaction = new EditingTransactionForm
         {
             Id = transaction.Id,
@@ -396,142 +457,40 @@
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_editingTransaction.Description))
+        var currentUser = _currentUser ?? await GetCurrentUserAsync();
+        if (currentUser is null)
         {
-            Snackbar.Add("Description is required.", Severity.Warning);
+            Snackbar.Add("You need to sign in again before saving changes.", Severity.Error);
             return;
         }
 
-        if (_editingTransaction.IsLatest && _editingTransaction.Amount <= 0m)
+        var request = new UpdateTransactionRequest
         {
-            Snackbar.Add("Amount must be greater than zero.", Severity.Warning);
+            Id = _editingTransaction.Id,
+            Description = _editingTransaction.Description,
+            Category = _editingTransaction.Category,
+            Amount = _editingTransaction.IsLatest ? _editingTransaction.Amount : null,
+            Type = _editingTransaction.IsLatest ? _editingTransaction.Type : null,
+            TransactionDate = _editingTransaction.IsLatest ? _editingTransaction.TransactionDate : null,
+            TagIds = _editingSelectedTagIds.ToList()
+        };
+
+        var result = await TransactionEditingService.UpdateAsync(currentUser, request, CancellationToken.None);
+        if (!result.Succeeded)
+        {
+            var message = result.Issues.Count > 0
+                ? string.Join(" ", result.Issues.Select(x => x.Message).Distinct())
+                : result.Message ?? "Unable to update transaction.";
+            var severity = result.Status == TransactionEditStatus.Forbidden || result.Status == TransactionEditStatus.NotFound
+                ? Severity.Error
+                : Severity.Warning;
+            Snackbar.Add(message, severity);
             return;
         }
-
-        var transaction = await DbContext.Transactions
-            .Include(x => x.TransactionTags)
-            .SingleOrDefaultAsync(x => x.Id == _editingTransaction.Id);
-        if (transaction is null)
-        {
-            Snackbar.Add("Transaction could not be found.", Severity.Error);
-            return;
-        }
-
-        var account = await DbContext.Accounts.SingleOrDefaultAsync(x => x.Id == transaction.AccountId);
-        if (account is null)
-        {
-            Snackbar.Add("Account could not be found.", Severity.Error);
-            return;
-        }
-
-        var accountTransactions = await DbContext.Transactions
-            .Where(x => x.AccountId == account.Id)
-            .ToListAsync();
-
-        var originalSnapshots = accountTransactions
-            .Select(x => new TransactionBalanceSnapshot(x.Id, x.Amount, x.Type, x.TransactionDate, x.CreatedAt))
-            .ToList();
-
-        var latestTransactionId = originalSnapshots
-            .OrderByDescending(x => x.TransactionDate)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenByDescending(x => x.Id)
-            .Select(x => x.Id)
-            .FirstOrDefault();
-
-        var isLatest = latestTransactionId == transaction.Id;
-        var normalizedType = NormalizeType(string.IsNullOrWhiteSpace(_editingTransaction.Type) ? transaction.Type : _editingTransaction.Type);
-        var normalizedDate = _editingTransaction.TransactionDate ?? transaction.TransactionDate;
-
-        if (!isLatest)
-        {
-            if (_editingTransaction.Amount != transaction.Amount)
-            {
-                Snackbar.Add("Amount can only be changed on the latest transaction.", Severity.Warning);
-                return;
-            }
-
-            if (normalizedDate != transaction.TransactionDate)
-            {
-                Snackbar.Add("Transaction date can only be changed on the latest transaction.", Severity.Warning);
-                return;
-            }
-
-            if (!string.Equals(normalizedType, transaction.Type, StringComparison.OrdinalIgnoreCase))
-            {
-                Snackbar.Add("Type can only be changed on the latest transaction.", Severity.Warning);
-                return;
-            }
-        }
-
-        var validTagIds = await DbContext.Tags
-            .Where(x => x.HouseholdId == account.HouseholdId && _editingSelectedTagIds.Contains(x.Id))
-            .Select(x => x.Id)
-            .ToListAsync();
-
-        var utcNow = DateTime.UtcNow;
-        transaction.Description = _editingTransaction.Description.Trim();
-        transaction.Category = string.IsNullOrWhiteSpace(_editingTransaction.Category) ? "General" : _editingTransaction.Category.Trim();
-        transaction.UpdatedAt = utcNow;
-
-        dbContextUpdateTagLinks(transaction, validTagIds);
-
-        if (isLatest)
-        {
-            transaction.Amount = _editingTransaction.Amount;
-            transaction.Type = normalizedType;
-            transaction.TransactionDate = normalizedDate;
-
-            var updatedSnapshots = originalSnapshots
-                .Select(x => x.Id == transaction.Id
-                    ? x with
-                    {
-                        Amount = transaction.Amount,
-                        Type = transaction.Type,
-                        TransactionDate = transaction.TransactionDate
-                    }
-                    : x)
-                .ToList();
-
-            var initialBalance = account.CurrentBalance - originalSnapshots.Sum(x => GetDelta(x.Amount, x.Type));
-            var runningBalance = initialBalance;
-            var trackedById = accountTransactions.ToDictionary(x => x.Id);
-
-            foreach (var snapshot in updatedSnapshots
-                .OrderBy(x => x.TransactionDate)
-                .ThenBy(x => x.CreatedAt)
-                .ThenBy(x => x.Id))
-            {
-                runningBalance += GetDelta(snapshot.Amount, snapshot.Type);
-                var trackedTransaction = trackedById[snapshot.Id];
-                trackedTransaction.BalanceAfterTransaction = runningBalance;
-                trackedTransaction.UpdatedAt = utcNow;
-            }
-
-            account.CurrentBalance = runningBalance;
-            account.UpdatedAt = utcNow;
-        }
-
-        await DbContext.SaveChangesAsync();
 
         Snackbar.Add("Transaction updated.", Severity.Success);
         await CancelEditAsync();
         await LoadAsync();
-    }
-
-    private void dbContextUpdateTagLinks(Treasury.App.Domain.Transaction transaction, List<Guid> validTagIds)
-    {
-        DbContext.TransactionTags.RemoveRange(transaction.TransactionTags);
-        transaction.TransactionTags.Clear();
-
-        foreach (var tagId in validTagIds)
-        {
-            transaction.TransactionTags.Add(new Treasury.App.Domain.TransactionTag
-            {
-                Transaction = transaction,
-                TagId = tagId
-            });
-        }
     }
 
     private string GetAccountName(Guid accountId)
@@ -539,6 +498,26 @@
         // Use the full visible accounts collection so historical transactions from inactive accounts still show a name
         return _visibleAccounts.FirstOrDefault(x => x.Id == accountId)?.Name ?? "Unknown account";
     }
+
+    private bool CanEditTransaction(Treasury.App.Domain.Transaction transaction)
+    {
+        if (_currentUser is null)
+        {
+            return false;
+        }
+
+        if (IsTransferLinked(transaction))
+        {
+            return false;
+        }
+
+        var account = _visibleAccounts.FirstOrDefault(x => x.Id == transaction.AccountId);
+        return account is not null && account.OwnerUserId == _currentUser.Id;
+    }
+
+    private bool IsTransferLinked(Treasury.App.Domain.Transaction transaction) =>
+        _transferLinkedTransactionIds.Contains(transaction.Id)
+        || transaction.Type is "transfer-in" or "transfer-out";
 
     private bool IsLatestTransaction(Treasury.App.Domain.Transaction transaction)
     {
@@ -590,6 +569,4 @@
         public DateTime? TransactionDate { get; set; } = DateTime.UtcNow;
         public bool IsLatest { get; set; }
     }
-
-    private sealed record TransactionBalanceSnapshot(Guid Id, decimal Amount, string Type, DateTime TransactionDate, DateTime CreatedAt);
 }

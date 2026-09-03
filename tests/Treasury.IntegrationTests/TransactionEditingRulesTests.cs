@@ -114,6 +114,72 @@ public class TransactionEditingRulesTests
         earlierTransaction.BalanceAfterTransaction.Should().Be(-2m);
     }
 
+    [Fact]
+    public async Task Edit_Partial_Request_Leaves_Omitted_Fields_Unchanged()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var accountId = await CreateAccountAsync(client, "Partial update");
+        var firstTransactionDate = DateTime.UtcNow.AddDays(-2);
+
+        var firstTransactionId = await CreateTransactionAsync(client, accountId, "First", 10m, "expense", firstTransactionDate);
+        _ = await CreateTransactionAsync(client, accountId, "Second", 20m, "income", DateTime.UtcNow.AddDays(-1));
+
+        var response = await client.PutAsJsonAsync($"/api/transactions/{firstTransactionId}", new
+        {
+            Id = firstTransactionId,
+            Description = "First renamed"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TreasuryDbContext>();
+
+        var transaction = await db.Transactions.SingleAsync(x => x.Id == firstTransactionId);
+        transaction.Description.Should().Be("First renamed");
+        transaction.Amount.Should().Be(10m);
+        transaction.Type.Should().Be("expense");
+        transaction.TransactionDate.Date.Should().Be(firstTransactionDate.Date);
+    }
+
+    [Fact]
+    public async Task Edit_TransferLinked_Rejects_Changes()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var fromAccountId = await CreateAccountAsync(client, "Transfer from");
+        var toAccountId = await CreateAccountAsync(client, "Transfer to");
+
+        var transferResponse = await client.PostAsJsonAsync("/api/transfers", new
+        {
+            FromAccountId = fromAccountId,
+            ToAccountId = toAccountId,
+            Amount = 25m,
+            Currency = "PLN",
+            Description = "Blocked transfer",
+            TransferDate = DateTime.UtcNow
+        });
+
+        transferResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        using var transferJson = JsonDocument.Parse(await transferResponse.Content.ReadAsStringAsync());
+        var outflowTransactionId = transferJson.RootElement.GetProperty("outflowTransactionId").GetGuid();
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/transactions/{outflowTransactionId}", new
+        {
+            Id = outflowTransactionId,
+            Description = "Should fail"
+        });
+
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await updateResponse.Content.ReadAsStringAsync();
+        body.Should().Contain("Transfer-linked transactions cannot be edited");
+    }
+
     private static HttpClient CreateAuthenticatedClient(TreasuryHostFactory app) =>
         app.CreateClient(new WebApplicationFactoryClientOptions
         {

@@ -34,3 +34,9 @@ Passed:
 
 - The migration adds `BalanceAfterTransaction` with a default value of `0m` for existing rows.
 - Latest-transaction edits recompute the full account running balance chain so date changes remain consistent.
+
+## Resolution update
+
+- Routed transaction edits through a shared `TransactionEditingService` so the UI and `PUT /api/transactions/{id:guid}` enforce the same permission checks.
+- Switched `UpdateTransactionRequest` to nullable/optional fields so omitted values are preserved instead of treated as edits.
+- Blocked edits for transfer-linked transactions and added coverage for shared-readonly permission checks, partial updates, and transfer-linked rejection.

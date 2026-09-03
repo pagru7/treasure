@@ -107,6 +107,28 @@ public class SharedReadOnlyUiPermissionTests
 
         postTransaction.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
+        var ownerTransactionResponse = await ownerClient.PostAsJsonAsync("/api/transactions", new
+        {
+            AccountId = accountId,
+            Description = "Owner transaction",
+            Category = "General",
+            Amount = 15m,
+            Currency = "PLN",
+            Type = "expense",
+            TransactionDate = DateTime.UtcNow
+        });
+        ownerTransactionResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        using var transactionJson = JsonDocument.Parse(await ownerTransactionResponse.Content.ReadAsStringAsync());
+        var transactionId = transactionJson.RootElement.GetProperty("id").GetGuid();
+
+        var editTransaction = await sharedClient.PutAsJsonAsync($"/api/transactions/{transactionId}", new
+        {
+            Id = transactionId,
+            Description = "Shared user edit attempt"
+        });
+
+        editTransaction.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
         // Additional guard: shared users must not be able to perform owner-only mutations such as balance correction
         var postBalanceCorrection = await sharedClient.PostAsJsonAsync($"/api/accounts/{accountId}/balance-correction", new
         {
