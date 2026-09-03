@@ -67,6 +67,13 @@ public sealed class CreateTransactionEndpoint(
         }
 
         var normalizedType = TransactionBalanceMath.NormalizeType(request.Type);
+        if (normalizedType is "transfer" or "transfer-in" or "transfer-out")
+        {
+            AddError(x => x.Type, "Use the dedicated Transfers flow to record transfers.");
+            await SendErrorsAsync(cancellation: ct);
+            return;
+        }
+
         var delta = TransactionBalanceMath.GetDelta(request.Amount, normalizedType);
 
         var utcNow = DateTime.UtcNow;

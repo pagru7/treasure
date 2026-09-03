@@ -86,6 +86,9 @@
                             @if (account.IsOwner)
                             {
                                 <MudStack Row="true" Class="mt-4" Spacing="2" Wrap="Wrap.Wrap">
+                                    <MudButton Variant="Variant.Outlined" OnClick="() => BeginEditAccount(account)">
+                                        Edit details
+                                    </MudButton>
                                     <MudButton Variant="Variant.Outlined" OnClick="() => ToggleActiveStateAsync(account)">
                                         @(account.IsActive ? "Deactivate" : "Reactivate")
                                     </MudButton>
@@ -93,6 +96,24 @@
                                         Remove
                                     </MudButton>
                                 </MudStack>
+
+                                @if (account.IsEditing)
+                                {
+                                    <MudPaper Class="pa-3 mt-3" Elevation="0" Outlined="true">
+                                        <MudGrid>
+                                            <MudItem xs="12" md="6">
+                                                <MudTextField Label="Account name" @bind-Value="account.EditingName" Required="true" />
+                                            </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <MudTextField Label="Bank account number (optional)" @bind-Value="account.EditingBankAccountNumber" />
+                                            </MudItem>
+                                        </MudGrid>
+                                        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-3" Spacing="2">
+                                            <MudButton Variant="Variant.Text" OnClick="() => CancelEditAccount(account)">Cancel</MudButton>
+                                            <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="() => SaveAccountDetailsAsync(account)">Save details</MudButton>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
 
                                 <MudDivider Class="my-3" />
                                 <MudText Typo="Typo.subtitle2">Shared with:</MudText>

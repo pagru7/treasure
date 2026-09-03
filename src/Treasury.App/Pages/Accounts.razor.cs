@@ -94,6 +94,8 @@ public partial class Accounts
                 IsActive = account.IsActive,
                 BankAccountNumber = account.BankAccountNumber,
                 IsOwner = account.OwnerUserId == _currentUser.Id,
+                EditingName = account.Name,
+                EditingBankAccountNumber = account.BankAccountNumber,
                 SharedWith = viewersByAccountId.TryGetValue(account.Id, out var viewers) ? viewers : new List<AccountViewerChoice>(),
                 SharedWithLoadFailed = sharedViewerLoadFailed
             }));
@@ -158,11 +160,21 @@ public partial class Accounts
             return;
         }
 
+        var deactivating = entity.IsActive;
         entity.IsActive = !entity.IsActive;
         entity.UpdatedAt = DateTime.UtcNow;
         await DbContext.SaveChangesAsync();
 
-        Snackbar.Add(entity.IsActive ? "Account reactivated." : "Account deactivated.", Severity.Success);
+        if (deactivating && !_showInactive)
+        {
+            _showInactive = true;
+            Snackbar.Add("Account deactivated. Showing inactive accounts so it remains visible.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(entity.IsActive ? "Account reactivated." : "Account deactivated.", Severity.Success);
+        }
+
         await LoadAccountsAsync();
     }
 
@@ -191,6 +203,70 @@ public partial class Accounts
         DbContext.Accounts.Remove(entity);
         await DbContext.SaveChangesAsync();
         Snackbar.Add("Account removed.", Severity.Success);
+        await LoadAccountsAsync();
+    }
+
+    private void BeginEditAccount(AccountCardVm account)
+    {
+        foreach (var item in _accounts)
+        {
+            if (!ReferenceEquals(item, account))
+            {
+                item.IsEditing = false;
+            }
+        }
+
+        account.IsEditing = true;
+        account.EditingName = account.Name;
+        account.EditingBankAccountNumber = account.BankAccountNumber ?? string.Empty;
+    }
+
+    private void CancelEditAccount(AccountCardVm account)
+    {
+        account.IsEditing = false;
+        account.EditingName = account.Name;
+        account.EditingBankAccountNumber = account.BankAccountNumber ?? string.Empty;
+    }
+
+    private async Task SaveAccountDetailsAsync(AccountCardVm account)
+    {
+        if (_currentUser is null || !account.IsOwner)
+        {
+            Snackbar.Add("Only the account owner can edit account details.", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(account.EditingName))
+        {
+            Snackbar.Add("Account name is required.", Severity.Warning);
+            return;
+        }
+
+        if (!AccountLifecycleValidation.TryNormalizeOptionalBankAccountNumber(account.EditingBankAccountNumber, out var normalizedBankAccountNumber, out var bankAccountError))
+        {
+            Snackbar.Add(bankAccountError!, Severity.Warning);
+            return;
+        }
+
+        var entity = await DbContext.Accounts.SingleOrDefaultAsync(x => x.Id == account.Id && x.HouseholdId == _currentUser.HouseholdId, CancellationToken.None);
+        if (entity is null)
+        {
+            Snackbar.Add("Account not found.", Severity.Error);
+            return;
+        }
+
+        if (entity.OwnerUserId != _currentUser.Id)
+        {
+            Snackbar.Add("Only the account owner can edit account details.", Severity.Warning);
+            return;
+        }
+
+        entity.Name = account.EditingName.Trim();
+        entity.BankAccountNumber = normalizedBankAccountNumber;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+
+        Snackbar.Add("Account details updated.", Severity.Success);
         await LoadAccountsAsync();
     }
 
@@ -290,6 +366,9 @@ public partial class Accounts
         public bool IsActive { get; set; }
         public bool IsOwner { get; set; }
         public string? BankAccountNumber { get; set; }
+        public bool IsEditing { get; set; }
+        public string EditingName { get; set; } = string.Empty;
+        public string? EditingBankAccountNumber { get; set; }
         public string SelectedShareEmail { get; set; } = string.Empty;
         public List<AccountViewerChoice> SharedWith { get; set; } = new();
         public bool SharedWithLoadFailed { get; set; }

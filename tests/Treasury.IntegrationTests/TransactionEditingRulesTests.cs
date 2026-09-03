@@ -218,6 +218,52 @@ public class TransactionEditingRulesTests
         body.Should().Contain("Transfer-linked transactions cannot be edited");
     }
 
+    [Fact]
+    public async Task Create_Transaction_Rejects_Transfer_Type()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var accountId = await CreateAccountAsync(client, "Manual transfer blocked");
+
+        var response = await client.PostAsJsonAsync("/api/transactions", new
+        {
+            AccountId = accountId,
+            Description = "Should fail",
+            Category = "General",
+            Amount = 10m,
+            Currency = "PLN",
+            Type = "transfer",
+            TransactionDate = DateTime.UtcNow
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("dedicated Transfers flow");
+    }
+
+    [Fact]
+    public async Task Edit_Transaction_Rejects_Transfer_Type()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var accountId = await CreateAccountAsync(client, "Edit transfer blocked");
+        var transactionId = await CreateTransactionAsync(client, accountId, "Regular transaction", 10m, "expense", DateTime.UtcNow);
+
+        var response = await client.PutAsJsonAsync($"/api/transactions/{transactionId}", new
+        {
+            Id = transactionId,
+            Type = "transfer"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("dedicated Transfers flow");
+    }
+
     private static HttpClient CreateAuthenticatedClient(TreasuryHostFactory app) =>
         app.CreateClient(new WebApplicationFactoryClientOptions
         {

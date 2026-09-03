@@ -1,8 +1,10 @@
 @page "/transactions"
 @attribute [Authorize]
+@using Treasury.App.Application.Accounts
 @inject TreasuryDbContext DbContext
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject UserManager<ApplicationUser> UserManager
+@inject AccountSharingService AccountSharingService
 @inject TransactionEditingService TransactionEditingService
 @inject AccountBalanceRecalculationService BalanceRecalculationService
 @inject ISnackbar Snackbar
@@ -41,7 +43,6 @@
                     <MudSelect T="string" Label="Type" @bind-Value="_newTransaction.Type">
                         <MudSelectItem Value="@("income")">Income</MudSelectItem>
                         <MudSelectItem Value="@("expense")">Expense</MudSelectItem>
-                        <MudSelectItem Value="@("transfer")">Transfer</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="2">
@@ -108,9 +109,6 @@
                                        Disabled="@(!_editingTransaction.IsLatest)">
                                 <MudSelectItem Value="@("income")">Income</MudSelectItem>
                                 <MudSelectItem Value="@("expense")">Expense</MudSelectItem>
-                                <MudSelectItem Value="@("transfer")">Transfer</MudSelectItem>
-                                <MudSelectItem Value="@("transfer-out")">Transfer out</MudSelectItem>
-                                <MudSelectItem Value="@("transfer-in")">Transfer in</MudSelectItem>
                             </MudSelect>
                         </MudItem>
                         <MudItem xs="12" md="1">
@@ -232,23 +230,29 @@
     private async Task LoadAsync()
     {
         _accounts.Clear();
-        if (_currentUser is not null)
+        _visibleAccounts.Clear();
+        _tags.Clear();
+        _transferLinkedTransactionIds.Clear();
+        _transactions.Clear();
+        _transactionTags.Clear();
+
+        if (_currentUser is null)
         {
-            _accounts.AddRange(await DbContext.Accounts
-                .Where(x => x.IsActive && x.OwnerUserId == _currentUser.Id)
-                .OrderBy(x => x.Name)
-                .ToListAsync());
+            return;
         }
 
-        // Load full visible account list (includes inactive) so historical transactions still show account names
-        _visibleAccounts.Clear();
-        _visibleAccounts.AddRange(await DbContext.Accounts.OrderBy(x => x.Name).ToListAsync());
+        var visibleAccounts = await AccountSharingService.GetVisibleAccountsAsync(_currentUser, includeInactive: true, CancellationToken.None);
+        _visibleAccounts.AddRange(visibleAccounts);
+        _accounts.AddRange(visibleAccounts.Where(x => x.IsActive && x.OwnerUserId == _currentUser.Id));
+        var visibleAccountIds = _visibleAccounts.Select(x => x.Id).ToHashSet();
 
-        _tags.Clear();
-        _tags.AddRange(await DbContext.Tags.OrderBy(x => x.Name).ToListAsync());
+        _tags.AddRange(await DbContext.Tags
+            .Where(x => x.HouseholdId == _currentUser.HouseholdId)
+            .OrderBy(x => x.Name)
+            .ToListAsync());
 
-        _transferLinkedTransactionIds.Clear();
         var transferLinks = await DbContext.Transfers
+            .Where(x => visibleAccountIds.Contains(x.FromAccountId) || visibleAccountIds.Contains(x.ToAccountId))
             .Select(x => new { x.OutflowTransactionId, x.InflowTransactionId })
             .ToListAsync();
         foreach (var link in transferLinks)
@@ -264,14 +268,13 @@
             }
         }
 
-        _transactions.Clear();
         _transactions.AddRange(await DbContext.Transactions
+            .Where(x => visibleAccountIds.Contains(x.AccountId))
             .OrderByDescending(x => x.TransactionDate)
             .ThenByDescending(x => x.CreatedAt)
             .ThenByDescending(x => x.Id)
             .ToListAsync());
 
-        _transactionTags.Clear();
         var tagLinks = await DbContext.TransactionTags
             .Include(x => x.Tag)
             .Where(x => _transactions.Select(t => t.Id).Contains(x.TransactionId))

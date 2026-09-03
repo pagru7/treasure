@@ -128,6 +128,11 @@ public class TransactionEditingService(
             issues.Add(new TransactionEditIssue(nameof(UpdateTransactionRequest.Amount), "Amount must be greater than zero."));
         }
 
+        if (hasType && normalizedType is "transfer" or "transfer-in" or "transfer-out")
+        {
+            issues.Add(new TransactionEditIssue(nameof(UpdateTransactionRequest.Type), "Use the dedicated Transfers flow to record transfers."));
+        }
+
         var amountChanged = hasAmount && normalizedAmount != transaction.Amount;
         var typeChanged = hasType && !string.Equals(normalizedType, transaction.Type, StringComparison.OrdinalIgnoreCase);
         var dateChanged = hasTransactionDate && normalizedTransactionDate != transaction.TransactionDate;

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor;
+using Treasury.App.Application.Accounts;
 using Treasury.App.Application.Transfers;
 using Treasury.App.Contracts.Transactions;
 using Treasury.App.Domain;
@@ -17,6 +18,7 @@ public partial class Transfers
     [Inject] public AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
     [Inject] public UserManager<ApplicationUser> UserManager { get; set; } = default!;
     [Inject] public TransferCreationService TransferCreationService { get; set; } = default!;
+    [Inject] public AccountSharingService AccountSharingService { get; set; } = default!;
 
     private ApplicationUser? _currentUser;
     private readonly List<AccountChoice> _accounts = new();
@@ -46,19 +48,17 @@ public partial class Transfers
 
         try
         {
-            var householdAccounts = await DbContext.Accounts
-                .Where(x => x.HouseholdId == _currentUser.HouseholdId)
-                .OrderBy(x => x.Name)
-                .ToListAsync();
+            var visibleAccounts = await AccountSharingService.GetVisibleAccountsAsync(_currentUser, includeInactive: true, CancellationToken.None);
+            var visibleAccountIds = visibleAccounts.Select(x => x.Id).ToHashSet();
 
             _visibleAccountNames.Clear();
-            foreach (var account in householdAccounts)
+            foreach (var account in visibleAccounts)
             {
                 _visibleAccountNames[account.Id] = account.Name;
             }
 
             _accounts.Clear();
-            _accounts.AddRange(householdAccounts
+            _accounts.AddRange(visibleAccounts
                 .Where(x => x.OwnerUserId == _currentUser.Id && x.IsActive)
                 .Select(x => new AccountChoice
                 {
@@ -69,7 +69,8 @@ public partial class Transfers
 
             _transfers.Clear();
             var transfers = await DbContext.Transfers
-                .Where(x => x.HouseholdId == _currentUser.HouseholdId)
+                .Where(x => x.HouseholdId == _currentUser.HouseholdId
+                    && (visibleAccountIds.Contains(x.FromAccountId) || visibleAccountIds.Contains(x.ToAccountId)))
                 .OrderByDescending(x => x.TransferDate)
                 .ThenByDescending(x => x.CreatedAt)
                 .Take(10)
@@ -168,7 +169,7 @@ public partial class Transfers
     }
 
     private string ResolveAccountName(Guid accountId) =>
-        _visibleAccountNames.TryGetValue(accountId, out var name) ? name : "Unknown account";
+        _visibleAccountNames.TryGetValue(accountId, out var name) ? name : "Other account";
 
     private sealed class AccountChoice
     {
