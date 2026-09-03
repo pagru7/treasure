@@ -7,11 +7,12 @@ namespace Treasury.App.Application.Accounts;
 
 public sealed record HouseholdUserChoice(string Email, string DisplayName);
 public sealed record AccountViewerChoice(string ViewerUserId, string Email, string DisplayName);
+public sealed record AccountViewerAssignment(Guid AccountId, string ViewerUserId, string Email, string DisplayName);
 public sealed record ShareReadOnlyResult(bool Succeeded, string? ErrorMessage);
 
-public sealed class AccountSharingService(TreasuryDbContext db, UserManager<ApplicationUser> userManager)
+public class AccountSharingService(TreasuryDbContext db, UserManager<ApplicationUser> userManager)
 {
-    public Task<List<Account>> GetVisibleAccountsAsync(ApplicationUser user, CancellationToken ct) =>
+    public virtual Task<List<Account>> GetVisibleAccountsAsync(ApplicationUser user, CancellationToken ct) =>
         db.Accounts
             .Where(x =>
                 x.HouseholdId == user.HouseholdId
@@ -21,7 +22,7 @@ public sealed class AccountSharingService(TreasuryDbContext db, UserManager<Appl
             .OrderBy(x => x.Name)
             .ToListAsync(ct);
 
-    public Task<List<HouseholdUserChoice>> GetHouseholdUsersAsync(ApplicationUser user, CancellationToken ct) =>
+    public virtual Task<List<HouseholdUserChoice>> GetHouseholdUsersAsync(ApplicationUser user, CancellationToken ct) =>
         db.Users
             .Where(x => x.HouseholdId == user.HouseholdId && x.Id != user.Id)
             .OrderBy(x => x.Email ?? x.UserName ?? x.Id)
@@ -30,7 +31,7 @@ public sealed class AccountSharingService(TreasuryDbContext db, UserManager<Appl
                 x.Email ?? x.UserName ?? x.Id))
             .ToListAsync(ct);
 
-    public Task<List<AccountViewerChoice>> GetSharedViewersAsync(ApplicationUser user, Guid accountId, CancellationToken ct) =>
+    public virtual Task<List<AccountViewerChoice>> GetSharedViewersAsync(ApplicationUser user, Guid accountId, CancellationToken ct) =>
         (from rule in db.VisibilityRules
          join viewer in db.Users on rule.ViewerUserId equals viewer.Id
          where rule.AccountId == accountId && viewer.HouseholdId == user.HouseholdId
@@ -40,7 +41,27 @@ public sealed class AccountSharingService(TreasuryDbContext db, UserManager<Appl
              viewer.Email ?? viewer.UserName ?? viewer.Id,
              viewer.Email ?? viewer.UserName ?? viewer.Id)).ToListAsync(ct);
 
-    public async Task<ShareReadOnlyResult> ShareReadOnlyAsync(ApplicationUser user, Guid accountId, string viewerEmail, CancellationToken ct)
+    public virtual async Task<List<AccountViewerAssignment>> GetSharedViewersAsync(ApplicationUser user, IReadOnlyCollection<Guid> accountIds, CancellationToken ct)
+    {
+        var distinctAccountIds = accountIds.Distinct().ToArray();
+        if (distinctAccountIds.Length == 0)
+        {
+            return [];
+        }
+
+        return await (from rule in db.VisibilityRules
+                join viewer in db.Users on rule.ViewerUserId equals viewer.Id
+                where distinctAccountIds.Contains(rule.AccountId) && viewer.HouseholdId == user.HouseholdId
+                orderby rule.AccountId, viewer.Email ?? viewer.UserName ?? viewer.Id
+                select new AccountViewerAssignment(
+                    rule.AccountId,
+                    viewer.Id,
+                    viewer.Email ?? viewer.UserName ?? viewer.Id,
+                    viewer.Email ?? viewer.UserName ?? viewer.Id))
+            .ToListAsync(ct);
+    }
+
+    public virtual async Task<ShareReadOnlyResult> ShareReadOnlyAsync(ApplicationUser user, Guid accountId, string viewerEmail, CancellationToken ct)
     {
         var account = await db.Accounts.SingleOrDefaultAsync(x => x.Id == accountId && x.HouseholdId == user.HouseholdId, ct);
         if (account is null)

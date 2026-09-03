@@ -17,3 +17,12 @@ Implemented the account-sharing service, delegated the share endpoint to it, and
 ## Notes
 - The Accounts page now shows only household users for sharing.
 - Shared users still see read-only accounts, but do not see share controls for accounts they do not own.
+
+## Review Fixes
+- Split accounts and household-user loading into separate, scoped error handlers so one failure no longer crashes the whole page.
+- Added a batched shared-viewers query and grouped the results by account to remove the per-account N+1 loop.
+- Added integration coverage for household-user load failure, shared-viewer load failure, and batched shared-viewer loading.
+
+## Validation
+- Passed: `dotnet test tests\Treasury.IntegrationTests\Treasury.IntegrationTests.csproj -c Debug --filter "FullyQualifiedName~AccountsSharingUiTests|FullyQualifiedName~SharedReadOnlyUiPermissionTests"`
+- Passed: `dotnet test tests\Treasury.IntegrationTests\Treasury.IntegrationTests.csproj -c Debug`

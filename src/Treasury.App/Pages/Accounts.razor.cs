@@ -20,11 +20,16 @@ public partial class Accounts
     private ApplicationUser? _currentUser;
     private readonly List<AccountCardVm> _accounts = new();
     private List<HouseholdUserChoice> _householdUsers = new();
+    private string? _accountsLoadError;
+    private string? _householdUsersLoadError;
     private bool _showCreateForm;
     private readonly NewAccountForm _newAccount = new();
 
     protected override async Task OnInitializedAsync()
     {
+        _accountsLoadError = null;
+        _householdUsersLoadError = null;
+
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _currentUser = await UserManager.GetUserAsync(authState.User);
         if (_currentUser is null)
@@ -34,8 +39,7 @@ public partial class Accounts
             return;
         }
 
-        await LoadAccountsAsync();
-        await LoadHouseholdUsersAsync();
+        await Task.WhenAll(LoadAccountsAsync(), LoadHouseholdUsersAsync());
     }
 
     private async Task LoadAccountsAsync()
@@ -43,28 +47,54 @@ public partial class Accounts
         if (_currentUser is null)
         {
             _accounts.Clear();
+            _accountsLoadError = null;
             return;
         }
 
-        var accounts = await AccountSharingService.GetVisibleAccountsAsync(_currentUser, CancellationToken.None);
-        var sharedViewers = new Dictionary<Guid, List<AccountViewerChoice>>();
-
-        foreach (var account in accounts)
+        try
         {
-            sharedViewers[account.Id] = await AccountSharingService.GetSharedViewersAsync(_currentUser, account.Id, CancellationToken.None);
+            _accountsLoadError = null;
+            var accounts = await AccountSharingService.GetVisibleAccountsAsync(_currentUser, CancellationToken.None);
+            Dictionary<Guid, List<AccountViewerChoice>> viewersByAccountId;
+
+            try
+            {
+                var sharedViewers = await AccountSharingService.GetSharedViewersAsync(
+                    _currentUser,
+                    accounts.Select(account => account.Id).ToArray(),
+                    CancellationToken.None);
+
+                viewersByAccountId = sharedViewers
+                    .GroupBy(viewer => viewer.AccountId)
+                    .ToDictionary(group => group.Key, group => group
+                        .Select(viewer => new AccountViewerChoice(viewer.ViewerUserId, viewer.Email, viewer.DisplayName))
+                        .ToList());
+            }
+            catch (Exception ex)
+            {
+                viewersByAccountId = new Dictionary<Guid, List<AccountViewerChoice>>();
+                _accountsLoadError = "Unable to load shared viewer details.";
+                Snackbar.Add($"Unable to load shared viewer details: {ex.Message}", Severity.Error);
+            }
+
+            _accounts.Clear();
+            _accounts.AddRange(accounts.Select(account => new AccountCardVm
+            {
+                Id = account.Id,
+                Name = account.Name,
+                Currency = account.Currency,
+                AccountType = account.AccountType,
+                CurrentBalance = account.CurrentBalance,
+                IsOwner = account.OwnerUserId == _currentUser.Id,
+                SharedWith = viewersByAccountId.TryGetValue(account.Id, out var viewers) ? viewers : new List<AccountViewerChoice>()
+            }));
         }
-
-        _accounts.Clear();
-        _accounts.AddRange(accounts.Select(account => new AccountCardVm
+        catch (Exception ex)
         {
-            Id = account.Id,
-            Name = account.Name,
-            Currency = account.Currency,
-            AccountType = account.AccountType,
-            CurrentBalance = account.CurrentBalance,
-            IsOwner = account.OwnerUserId == _currentUser.Id,
-            SharedWith = sharedViewers.TryGetValue(account.Id, out var viewers) ? viewers : new List<AccountViewerChoice>()
-        }));
+            _accounts.Clear();
+            _accountsLoadError = "Unable to load accounts.";
+            Snackbar.Add($"Unable to load accounts: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task LoadHouseholdUsersAsync()
@@ -72,10 +102,21 @@ public partial class Accounts
         if (_currentUser is null)
         {
             _householdUsers = new List<HouseholdUserChoice>();
+            _householdUsersLoadError = null;
             return;
         }
 
-        _householdUsers = await AccountSharingService.GetHouseholdUsersAsync(_currentUser, CancellationToken.None);
+        try
+        {
+            _householdUsers = await AccountSharingService.GetHouseholdUsersAsync(_currentUser, CancellationToken.None);
+            _householdUsersLoadError = null;
+        }
+        catch (Exception ex)
+        {
+            _householdUsers = new List<HouseholdUserChoice>();
+            _householdUsersLoadError = "Unable to load household users.";
+            Snackbar.Add($"Unable to load household users: {ex.Message}", Severity.Error);
+        }
     }
 
     private void ToggleCreateForm()
