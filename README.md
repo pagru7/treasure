@@ -54,3 +54,11 @@ API equivalents:
 
 - In Docker production mode, PostgreSQL is used and migrations are applied automatically on startup.
 - DataProtection keys are persisted in a Docker volume to keep auth/antiforgery tokens stable across restarts.
+
+## Behavior and UI notes
+
+- Inactive accounts are hidden by default and blocked from creating new transfers or transactions.
+- Transfers page (UI): `/transfers` — use this page to create and view transfer records between accounts.
+- Transaction editing rule: only the latest transaction on an account may change amount, date, or type; older transactions are immutable except for tagging/notes.
+
+Operator guidance above reflects Phase 2 lifecycle and is enforced by acceptance/domain rules and integration tests.
