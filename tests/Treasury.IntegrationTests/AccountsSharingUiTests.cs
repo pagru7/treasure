@@ -56,11 +56,15 @@ public class AccountsSharingUiTests
         // Core expectations preserved from the brief
         body.Should().Contain("Shared with:");
         body.Should().Contain(sharedEmail);
+        // Explicit picker semantics expected in the UI
+        body.Should().Contain("Share with household user");
         body.Should().Contain("Share read-only");
         body.Should().NotContain(ownerEmail);
 
-        // Stronger UX expectations (keeps test failing until UI implements picker semantics)
-        body.Should().Contain("Household");
+        // No manual email-entry should be present for household sharing
+        body.Should().NotContain("input type=\"email\"");
+        body.Should().NotContain("Enter email");
+        body.Should().NotContain("Invite by email");
 
         // Verify shared user can see the shared account but does not see owner-only share controls
         var sharedPageResponse = await sharedClient.GetAsync("/accounts");
