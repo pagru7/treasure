@@ -1,5 +1,5 @@
-using System.Net;
 using FluentAssertions;
+using System.Net;
 
 namespace Treasury.IntegrationTests;
 

@@ -54,14 +54,14 @@ public class AccountSharingService(TreasuryDbContext db, UserManager<Application
         }
 
         return await (from rule in db.VisibilityRules
-                join viewer in db.Users on rule.ViewerUserId equals viewer.Id
-                where distinctAccountIds.Contains(rule.AccountId) && viewer.HouseholdId == user.HouseholdId
-                orderby rule.AccountId, viewer.Email ?? viewer.UserName ?? viewer.Id
-                select new AccountViewerAssignment(
-                    rule.AccountId,
-                    viewer.Id,
-                    viewer.Email ?? viewer.UserName ?? viewer.Id,
-                    viewer.Email ?? viewer.UserName ?? viewer.Id))
+                      join viewer in db.Users on rule.ViewerUserId equals viewer.Id
+                      where distinctAccountIds.Contains(rule.AccountId) && viewer.HouseholdId == user.HouseholdId
+                      orderby rule.AccountId, viewer.Email ?? viewer.UserName ?? viewer.Id
+                      select new AccountViewerAssignment(
+                          rule.AccountId,
+                          viewer.Id,
+                          viewer.Email ?? viewer.UserName ?? viewer.Id,
+                          viewer.Email ?? viewer.UserName ?? viewer.Id))
             .ToListAsync(ct);
     }
 

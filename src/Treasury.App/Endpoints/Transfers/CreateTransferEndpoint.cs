@@ -1,7 +1,7 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
-using Treasury.App.Contracts.Transactions;
 using Treasury.App.Application.Transfers;
+using Treasury.App.Contracts.Transactions;
 using Treasury.App.Domain;
 
 namespace Treasury.App.Endpoints.Transfers;
@@ -48,12 +48,15 @@ public sealed class CreateTransferEndpoint(
                     case nameof(CreateTransferRequest.FromAccountId):
                         AddError(x => x.FromAccountId, issue.Message);
                         break;
+
                     case nameof(CreateTransferRequest.ToAccountId):
                         AddError(x => x.ToAccountId, issue.Message);
                         break;
+
                     case nameof(CreateTransferRequest.Amount):
                         AddError(x => x.Amount, issue.Message);
                         break;
+
                     default:
                         AddError(issue.Message);
                         break;

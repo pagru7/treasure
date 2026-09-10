@@ -1,7 +1,7 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
-using Treasury.App.Domain;
 using Treasury.App.Application.Accounts;
+using Treasury.App.Domain;
 
 namespace Treasury.App.Endpoints.Accounts;
 

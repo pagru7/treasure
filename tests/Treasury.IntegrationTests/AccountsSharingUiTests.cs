@@ -1,13 +1,12 @@
-using System.Net;
-using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Treasury.App.Application.Accounts;
 using Treasury.App.Domain;
-using Treasury.App.Infrastructure.Data;
 
 namespace Treasury.IntegrationTests;
 
