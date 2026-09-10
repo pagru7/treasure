@@ -20,7 +20,6 @@ using Treasury.App.Application.Valuations;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Auth;
 using Treasury.App.Infrastructure.Data;
-using Treasury.App.Infrastructure.Data.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -148,8 +147,12 @@ app.MapPost("/auth/register-submit", async (HttpContext httpContext, UserManager
     var email = payload.Email;
     var password = payload.Password;
     var confirmPassword = payload.ConfirmPassword;
+    var householdNameOrId = payload.HouseholdNameOrId;
 
-    if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(confirmPassword))
+    if (string.IsNullOrWhiteSpace(email)
+        || string.IsNullOrWhiteSpace(password)
+        || string.IsNullOrWhiteSpace(confirmPassword)
+        || string.IsNullOrWhiteSpace(householdNameOrId))
     {
         return Results.Redirect("/auth/register?error=Please+complete+all+fields.");
     }
@@ -164,10 +167,32 @@ app.MapPost("/auth/register-submit", async (HttpContext httpContext, UserManager
         return Results.Redirect("/auth/register?error=Password+must+be+at+least+6+characters.");
     }
 
-    var householdId = dbContext.Households.OrderBy(x => x.Id).Select(x => x.Id).FirstOrDefault();
-    if (householdId == Guid.Empty)
+    var householdInput = householdNameOrId.Trim();
+    Guid householdId;
+
+    if (Guid.TryParse(householdInput, out var existingHouseholdId))
     {
-        householdId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var exists = await dbContext.Households
+            .AnyAsync(x => x.Id == existingHouseholdId);
+
+        if (!exists)
+        {
+            return Results.Redirect("/auth/register?error=Provided+household+id+does+not+exist.");
+        }
+
+        householdId = existingHouseholdId;
+    }
+    else
+    {
+        var household = new Household
+        {
+            Name = householdInput
+        };
+
+        dbContext.Households.Add(household);
+        await dbContext.SaveChangesAsync();
+
+        householdId = household.Id;
     }
 
     var user = new ApplicationUser
@@ -233,7 +258,8 @@ async Task<AuthRequestPayload> ReadAuthPayloadAsync(HttpRequest request)
         return new AuthRequestPayload(
             form["Email"].ToString(),
             form["Password"].ToString(),
-            form["ConfirmPassword"].ToString());
+            form["ConfirmPassword"].ToString(),
+            form["HouseholdNameOrId"].ToString());
     }
 
     if (request.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true)
@@ -242,7 +268,7 @@ async Task<AuthRequestPayload> ReadAuthPayloadAsync(HttpRequest request)
 
         if (string.IsNullOrWhiteSpace(raw))
         {
-            return new AuthRequestPayload(string.Empty, string.Empty, string.Empty);
+            return new AuthRequestPayload(string.Empty, string.Empty, string.Empty, string.Empty);
         }
 
         using var document = JsonDocument.Parse(raw);
@@ -251,10 +277,11 @@ async Task<AuthRequestPayload> ReadAuthPayloadAsync(HttpRequest request)
         return new AuthRequestPayload(
             GetStringProperty(root, "Email"),
             GetStringProperty(root, "Password"),
-            GetStringProperty(root, "ConfirmPassword"));
+            GetStringProperty(root, "ConfirmPassword"),
+            GetStringProperty(root, "HouseholdNameOrId"));
     }
 
-    return new AuthRequestPayload(string.Empty, string.Empty, string.Empty);
+    return new AuthRequestPayload(string.Empty, string.Empty, string.Empty, string.Empty);
 }
 
 string? GetStringProperty(JsonElement root, string propertyName)
@@ -284,7 +311,7 @@ string? GetStringProperty(JsonElement root, string propertyName)
     return property.ValueKind == JsonValueKind.String ? property.GetString() : property.ToString();
 }
 
-public sealed record AuthRequestPayload(string? Email, string? Password, string? ConfirmPassword);
+public sealed record AuthRequestPayload(string? Email, string? Password, string? ConfirmPassword, string? HouseholdNameOrId);
 
 public partial class Program
 { }
