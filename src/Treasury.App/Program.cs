@@ -114,8 +114,6 @@ using (var scope = app.Services.CreateScope())
         await db.Database.EnsureCreatedAsync();
     }
 
-    await InitialSeed.SeedAsync(db);
-
     // Recompute every account once at startup so any 0-default balance rows are repaired
     // while preserving each account's opening balance baseline.
     var balanceRecalculationService = scope.ServiceProvider.GetRequiredService<AccountBalanceRecalculationService>();
@@ -288,4 +286,5 @@ string? GetStringProperty(JsonElement root, string propertyName)
 
 public sealed record AuthRequestPayload(string? Email, string? Password, string? ConfirmPassword);
 
-public partial class Program { }
+public partial class Program
+{ }
