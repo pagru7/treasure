@@ -1,0 +1,72 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="TreasuryTheme.Create()" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6">Treasury</MudText>
+        <MudSpacer />
+
+        <AuthorizeView>
+            <Authorized>
+                <MudButton Variant="Variant.Text" Href="/">Dashboard</MudButton>
+                <MudButton Variant="Variant.Text" Href="/accounts">Accounts</MudButton>
+                <MudButton Variant="Variant.Text" Href="/transactions">Transactions</MudButton>
+                <MudButton Variant="Variant.Text" Href="/transfers">Transfers</MudButton>
+                <MudButton Variant="Variant.Text" Href="/budgets">Budgets</MudButton>
+                <MudButton Variant="Variant.Text" Href="/bills">Bills</MudButton>
+                <MudButton Variant="Variant.Text" Href="/tags">Tags</MudButton>
+                <MudButton Variant="Variant.Text" Href="/valuations">Valuations</MudButton>
+                <MudButton Variant="Variant.Text" Href="/shared">Shared</MudButton>
+                <MudButton Variant="Variant.Text" Href="/rates">Rates</MudButton>
+                <form method="post" action="/auth/logout-submit" style="display:inline; margin-left: 0.5rem;">
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Text" Color="Color.Inherit">Logout</MudButton>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Variant="Variant.Text" Href="/auth/login">Login</MudButton>
+                <MudButton Variant="Variant.Text" Href="/auth/register">Register</MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Temporary" ClipMode="DrawerClipMode.Always">
+        <MudNavMenu>
+            <AuthorizeView>
+                <Authorized>
+                    <MudNavLink Href="/">Dashboard</MudNavLink>
+                    <MudNavLink Href="/accounts">Accounts</MudNavLink>
+                    <MudNavLink Href="/transactions">Transactions</MudNavLink>
+                    <MudNavLink Href="/transfers">Transfers</MudNavLink>
+                    <MudNavLink Href="/budgets">Budgets</MudNavLink>
+                    <MudNavLink Href="/bills">Bills</MudNavLink>
+                    <MudNavLink Href="/tags">Tags</MudNavLink>
+                    <MudNavLink Href="/valuations">Valuations</MudNavLink>
+                    <MudNavLink Href="/shared">Shared</MudNavLink>
+                    <MudNavLink Href="/rates">Rates</MudNavLink>
+                    <form method="post" action="/auth/logout-submit">
+                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Text" FullWidth="true">Logout</MudButton>
+                    </form>
+                </Authorized>
+                <NotAuthorized>
+                    <MudNavLink Href="/auth/login">Login</MudNavLink>
+                    <MudNavLink Href="/auth/register">Register</MudNavLink>
+                </NotAuthorized>
+            </AuthorizeView>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent Class="pa-4 pa-sm-6">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen;
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+}

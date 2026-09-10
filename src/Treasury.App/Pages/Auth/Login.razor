@@ -1,0 +1,47 @@
+@page "/auth/login"
+@inject NavigationManager Navigation
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="pa-6">
+    <MudPaper Class="pa-6 rounded-xl" Elevation="3">
+        <MudStack Spacing="3">
+            <div>
+                <MudText Typo="Typo.h4">Welcome back</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Sign in to your household dashboard.</MudText>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true">@_errorMessage</MudAlert>
+            }
+
+            <form method="post" action="/auth/login-submit">
+                <MudStack Spacing="2">
+                    <label>
+                        <span class="mud-typography mud-typography-body2 mud-secondary-text">Email</span>
+                        <input class="field-input mt-2" type="email" name="Email" required />
+                    </label>
+                    <label>
+                        <span class="mud-typography mud-typography-body2 mud-secondary-text">Password</span>
+                        <input class="field-input mt-2" type="password" name="Password" required />
+                    </label>
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true">Log in</MudButton>
+                </MudStack>
+            </form>
+
+            <MudButton Variant="Variant.Text" Href="/auth/register" FullWidth="true">Create account</MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string? _errorMessage;
+
+    protected override void OnParametersSet()
+    {
+        var query = new Uri(Navigation.Uri).Query;
+        if (!string.IsNullOrWhiteSpace(query) && QueryHelpers.ParseQuery(query).TryGetValue("error", out var value))
+        {
+            _errorMessage = value.ToString();
+        }
+    }
+}

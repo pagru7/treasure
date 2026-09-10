@@ -1,0 +1,52 @@
+# Phase 2 Task 3 Report
+
+## Summary
+
+Implemented transaction running-balance tracking and edit-rule enforcement.
+
+### Data/model
+- Added `Transaction.BalanceAfterTransaction`.
+- Generated EF migration `20260903134028_AddTransactionBalanceAfterTransaction`.
+- Updated the model snapshot and seeded historical transactions with running-balance values.
+
+### Write paths
+- `CreateTransactionEndpoint` now stores `BalanceAfterTransaction` on new transactions.
+- `TransferCreationService` now stores running balances for transfer outflow/inflow transactions.
+- Added `PUT /api/transactions/{id:guid}` via `UpdateTransactionEndpoint`.
+
+### Edit rules
+- Non-latest transactions can only change description, category, and tags.
+- Latest transactions can change amount, date, and type, and the account balance plus running balances are recomputed.
+- Transactions page now shows an edit affordance and disables amount/date/type editing for historical rows.
+
+### API/read updates
+- Transaction list endpoints now return `BalanceAfterTransaction`.
+- Transaction ordering is now deterministic with `TransactionDate`, `CreatedAt`, and `Id`.
+
+## Tests
+
+Passed:
+- `dotnet test tests\\Treasury.IntegrationTests\\Treasury.IntegrationTests.csproj -c Debug --filter "FullyQualifiedName~TransactionEditingRulesTests"`
+- `dotnet test tests\\Treasury.IntegrationTests\\Treasury.IntegrationTests.csproj -c Debug --filter "FullyQualifiedName~AccountsLifecycleTests|FullyQualifiedName~TransfersWorkflowTests|FullyQualifiedName~SharedReadOnlyUiPermissionTests"`
+- `dotnet test tests\\Treasury.IntegrationTests\\Treasury.IntegrationTests.csproj -c Debug`
+
+## Notes
+
+- The migration adds `BalanceAfterTransaction` with a default value of `0m` for existing rows.
+- Latest-transaction edits recompute the full account running balance chain so date changes remain consistent.
+
+## Resolution update
+
+- Routed transaction edits through a shared `TransactionEditingService` so the UI and `PUT /api/transactions/{id:guid}` enforce the same permission checks.
+- Switched `UpdateTransactionRequest` to nullable/optional fields so omitted values are preserved instead of treated as edits.
+- Blocked edits for transfer-linked transactions and added coverage for shared-readonly permission checks, partial updates, and transfer-linked rejection.
+
+## Task 3 rereview follow-up
+
+- Added a shared `AccountBalanceRecalculationService` that recomputes one account's running balance chain in `TransactionDate`, `CreatedAt`, `Id` order and updates both `BalanceAfterTransaction` and `Account.CurrentBalance`.
+- Hooked that recomputation into transaction create, transfer create, transaction update, balance correction, and the transactions page create path.
+- Chose a startup backfill routine after seed/migration to repair any existing `BalanceAfterTransaction = 0` rows while preserving each account's opening balance baseline.
+- Added regression coverage for backdated transaction inserts, backdated transfer inserts, and balance-correction running-balance updates.
+- Validation rerun:
+  - `dotnet test tests\\Treasury.IntegrationTests\\Treasury.IntegrationTests.csproj -c Debug --filter "FullyQualifiedName~TransactionEditingRulesTests|FullyQualifiedName~TransfersWorkflowTests|FullyQualifiedName~AccountsLifecycleTests"`
+  - `dotnet test tests\\Treasury.IntegrationTests\\Treasury.IntegrationTests.csproj -c Debug`

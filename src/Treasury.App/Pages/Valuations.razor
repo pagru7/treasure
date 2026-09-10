@@ -1,0 +1,196 @@
+@page "/valuations"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Valuations</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">Manual bullion and coin valuations for household assets.</MudText>
+
+        <MudGrid>
+            <MudItem xs="12" lg="6">
+                <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                    <MudText Typo="Typo.h6">Bullion formula</MudText>
+                    <MudGrid Class="mt-2">
+                        <MudItem xs="12">
+                            <MudTextField Label="Asset name" @bind-Value="_bullion.AssetName" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField T="decimal" Label="Weight" @bind-Value="_bullion.Weight" Min="0.0001m" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField T="decimal" Label="Purity (0-1)" @bind-Value="_bullion.Purity" Min="0.0001m" Max="1m" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField T="decimal" Label="Unit price" @bind-Value="_bullion.UnitPrice" Min="0.0001m" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudStack Row="true" Class="mt-3" Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="SaveBullionAsync">Save bullion valuation</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" lg="6">
+                <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                    <MudText Typo="Typo.h6">Coin manual value</MudText>
+                    <MudGrid Class="mt-2">
+                        <MudItem xs="12">
+                            <MudTextField Label="Asset name" @bind-Value="_coin.AssetName" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudNumericField T="decimal" Label="Quantity" @bind-Value="_coin.Quantity" Min="0.0001m" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudNumericField T="decimal" Label="Unit value" @bind-Value="_coin.UnitValue" Min="0.0001m" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudStack Row="true" Class="mt-3" Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="SaveCoinAsync">Save coin valuation</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudTable T="AssetValuation" Items="_valuations" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Asset</MudTh>
+                    <MudTh>Kind</MudTh>
+                    <MudTh>Total value</MudTh>
+                    <MudTh>Date</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Asset">@context.AssetName</MudTd>
+                    <MudTd DataLabel="Kind">@context.Kind</MudTd>
+                    <MudTd DataLabel="Total value">@context.CurrentTotalValue.ToString("N2") @context.Currency</MudTd>
+                    <MudTd DataLabel="Date">@context.ValuationDate.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<AssetValuation> _valuations = new();
+    private readonly BullionForm _bullion = new();
+    private readonly CoinForm _coin = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(auth.User);
+    }
+
+    private async Task LoadAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            _valuations.Clear();
+            return;
+        }
+
+        _valuations.Clear();
+        _valuations.AddRange(await DbContext.AssetValuations
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .OrderByDescending(x => x.ValuationDate)
+            .ToListAsync());
+    }
+
+    private async Task SaveBullionAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in.", Severity.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_bullion.AssetName) || _bullion.Weight <= 0m || _bullion.Purity <= 0m || _bullion.Purity > 1m || _bullion.UnitPrice <= 0m)
+        {
+            Snackbar.Add("Provide a valid asset name, weight, purity and unit price.", Severity.Warning);
+            return;
+        }
+
+        var total = decimal.Round(_bullion.Weight * _bullion.Purity * _bullion.UnitPrice, 4, MidpointRounding.AwayFromZero);
+        DbContext.AssetValuations.Add(new AssetValuation
+        {
+            HouseholdId = user.HouseholdId,
+            AssetName = _bullion.AssetName.Trim(),
+            Kind = ValuationKind.BullionFormula,
+            Quantity = 1m,
+            Weight = _bullion.Weight,
+            Purity = _bullion.Purity,
+            CurrentUnitValue = _bullion.UnitPrice,
+            CurrentTotalValue = total,
+            Currency = "PLN",
+            ValuationDate = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        await DbContext.SaveChangesAsync();
+        Snackbar.Add("Bullion valuation saved.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task SaveCoinAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in.", Severity.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_coin.AssetName) || _coin.Quantity <= 0m || _coin.UnitValue <= 0m)
+        {
+            Snackbar.Add("Provide a valid asset name, quantity and unit value.", Severity.Warning);
+            return;
+        }
+
+        DbContext.AssetValuations.Add(new AssetValuation
+        {
+            HouseholdId = user.HouseholdId,
+            AssetName = _coin.AssetName.Trim(),
+            Kind = ValuationKind.CoinManual,
+            Quantity = _coin.Quantity,
+            Weight = 0m,
+            Purity = 0m,
+            CurrentUnitValue = _coin.UnitValue,
+            CurrentTotalValue = decimal.Round(_coin.Quantity * _coin.UnitValue, 4, MidpointRounding.AwayFromZero),
+            Currency = "PLN",
+            ValuationDate = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        await DbContext.SaveChangesAsync();
+        Snackbar.Add("Coin valuation saved.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private sealed class BullionForm
+    {
+        public string AssetName { get; set; } = string.Empty;
+        public decimal Weight { get; set; }
+        public decimal Purity { get; set; } = 0.9999m;
+        public decimal UnitPrice { get; set; }
+    }
+
+    private sealed class CoinForm
+    {
+        public string AssetName { get; set; } = string.Empty;
+        public decimal Quantity { get; set; } = 1m;
+        public decimal UnitValue { get; set; }
+    }
+}

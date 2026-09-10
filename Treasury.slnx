@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/Treasury.App/Treasury.App.csproj" />
+  <Project Path="tests/Treasury.Domain.Tests/Treasury.Domain.Tests.csproj" />
+  <Project Path="tests/Treasury.IntegrationTests/Treasury.IntegrationTests.csproj" />
+</Solution>

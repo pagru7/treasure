@@ -1,0 +1,132 @@
+@page "/rates"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Exchange rates</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">Manual FX rates for converting portfolio values.</MudText>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudTextField Label="From" @bind-Value="_newRate.FromCurrency" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudTextField Label="To" @bind-Value="_newRate.ToCurrency" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField T="decimal" Label="Rate" @bind-Value="_newRate.Rate" Min="0.0001m" />
+                </MudItem>
+                <MudItem xs="12" md="3" Class="d-flex align-center justify-end">
+                    <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="SaveRateAsync">Save rate</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudTable T="CurrencyRate" Items="_rates" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Pair</MudTh>
+                    <MudTh>Rate</MudTh>
+                    <MudTh>Last updated</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Pair">@context.FromCurrency/@context.ToCurrency</MudTd>
+                    <MudTd DataLabel="Rate">@context.Rate.ToString("N4")</MudTd>
+                    <MudTd DataLabel="Last updated">@context.EffectiveAt.ToString("yyyy-MM-dd")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<CurrencyRate> _rates = new();
+    private readonly NewRateForm _newRate = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRatesAsync();
+    }
+
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(auth.User);
+    }
+
+    private async Task LoadRatesAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            _rates.Clear();
+            return;
+        }
+
+        _rates.Clear();
+        _rates.AddRange(await DbContext.CurrencyRates
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .OrderBy(x => x.FromCurrency)
+            .ThenBy(x => x.ToCurrency)
+            .ToListAsync());
+    }
+
+    private async Task SaveRateAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in.", Severity.Error);
+            return;
+        }
+
+        var from = (_newRate.FromCurrency ?? string.Empty).Trim().ToUpperInvariant();
+        var to = (_newRate.ToCurrency ?? string.Empty).Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to) || from == to || _newRate.Rate <= 0m)
+        {
+            Snackbar.Add("Provide valid different currencies and a positive rate.", Severity.Warning);
+            return;
+        }
+
+        var existing = await DbContext.CurrencyRates.SingleOrDefaultAsync(x =>
+            x.HouseholdId == user.HouseholdId
+            && x.FromCurrency == from
+            && x.ToCurrency == to);
+
+        if (existing is null)
+        {
+            DbContext.CurrencyRates.Add(new CurrencyRate
+            {
+                HouseholdId = user.HouseholdId,
+                FromCurrency = from,
+                ToCurrency = to,
+                Rate = _newRate.Rate,
+                EffectiveAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            existing.Rate = _newRate.Rate;
+            existing.EffectiveAt = DateTime.UtcNow;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await DbContext.SaveChangesAsync();
+        Snackbar.Add("Rate saved.", Severity.Success);
+        await LoadRatesAsync();
+    }
+
+    private sealed class NewRateForm
+    {
+        public string FromCurrency { get; set; } = "PLN";
+        public string ToCurrency { get; set; } = "EUR";
+        public decimal Rate { get; set; } = 0.2174m;
+    }
+}

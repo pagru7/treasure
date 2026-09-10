@@ -1,0 +1,14 @@
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <MudContainer Class="mt-8">
+                <MudAlert Severity="Severity.Warning">Sorry, there's nothing at this address.</MudAlert>
+            </MudContainer>
+        </LayoutView>
+    </NotFound>
+</Router>

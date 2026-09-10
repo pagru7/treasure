@@ -1,0 +1,122 @@
+@page "/tags"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Tags</MudText>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField Label="Tag name" @bind-Value="_newTagName" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField Label="Color" @bind-Value="_newTagColor" Placeholder="#3B82F6" />
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="CreateTagAsync">Add</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @if (_tags.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No custom tags yet.</MudAlert>
+        }
+        else
+        {
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudTable T="Treasury.App.Domain.Tag" Items="_tags" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Color</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Color">
+                            <MudChip T="string" Size="Size.Small" Style="@($"background:{context.Color}; color:white;")">@context.Color</MudChip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<Treasury.App.Domain.Tag> _tags = new();
+    private string _newTagName = string.Empty;
+    private string _newTagColor = "#3B82F6";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(authState.User);
+    }
+
+    private async Task LoadAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            _tags.Clear();
+            return;
+        }
+
+        _tags.Clear();
+        _tags.AddRange(await DbContext.Tags
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .OrderBy(x => x.Name)
+            .ToListAsync());
+    }
+
+    private async Task CreateTagAsync()
+    {
+        var name = _newTagName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Snackbar.Add("Tag name is required.", Severity.Warning);
+            return;
+        }
+
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in to manage tags.", Severity.Error);
+            return;
+        }
+
+        var exists = await DbContext.Tags.AnyAsync(x => x.HouseholdId == user.HouseholdId && x.Name.ToLower() == name.ToLower());
+        if (exists)
+        {
+            Snackbar.Add("This tag already exists.", Severity.Warning);
+            return;
+        }
+
+        var tag = new Treasury.App.Domain.Tag
+        {
+            HouseholdId = user.HouseholdId,
+            Name = name,
+            Color = string.IsNullOrWhiteSpace(_newTagColor) ? "#3B82F6" : _newTagColor.Trim(),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        DbContext.Tags.Add(tag);
+        await DbContext.SaveChangesAsync();
+
+        _newTagName = string.Empty;
+        _newTagColor = "#3B82F6";
+        Snackbar.Add("Tag saved.", Severity.Success);
+        await LoadAsync();
+    }
+}

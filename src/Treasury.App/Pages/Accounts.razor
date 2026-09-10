@@ -1,0 +1,170 @@
+@page "/accounts"
+@attribute [Authorize]
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">Accounts</MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudSwitch T="bool" Label="Show inactive" checked="_showInactive" checkedChanged="OnShowInactiveChanged" />
+                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.Add" OnClick="ToggleCreateForm">Add account</MudButton>
+            </MudStack>
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(_accountsLoadError))
+        {
+            <MudAlert Severity="Severity.Error">@_accountsLoadError</MudAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_householdUsersLoadError))
+        {
+            <MudAlert Severity="Severity.Error">@_householdUsersLoadError</MudAlert>
+        }
+
+        @if (_showCreateForm)
+        {
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudTextField Label="Account name" @bind-Value="_newAccount.Name" Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField Label="Bank account number (optional)" @bind-Value="_newAccount.BankAccountNumber" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="string" Label="Currency" @bind-Value="_newAccount.Currency">
+                            <MudSelectItem Value="@("PLN")">PLN</MudSelectItem>
+                            <MudSelectItem Value="@("EUR")">EUR</MudSelectItem>
+                            <MudSelectItem Value="@("USD")">USD</MudSelectItem>
+                            <MudSelectItem Value="@("GBP")">GBP</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="string" Label="Type" @bind-Value="_newAccount.AccountType">
+                            <MudSelectItem Value="@("cash-wallet")">Cash wallet</MudSelectItem>
+                            <MudSelectItem Value="@("bank-account")">Bank account</MudSelectItem>
+                            <MudSelectItem Value="@("savings")">Savings</MudSelectItem>
+                            <MudSelectItem Value="@("credit-card")">Credit card</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudNumericField Label="Initial balance" @bind-Value="_newAccount.InitialBalance" Min="0m" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
+                    <MudButton Variant="Variant.Text" OnClick="ToggleCreateForm">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="CreateAccountAsync">Save account</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
+
+        @if (_accounts.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No accounts yet. Create your first household account to get started.</MudAlert>
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var account in _accounts)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                            <MudText Typo="Typo.h6">@account.Name</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@account.AccountType</MudText>
+                            @if (!string.IsNullOrWhiteSpace(account.BankAccountNumber))
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Bank account: @account.BankAccountNumber</MudText>
+                            }
+                            @if (!account.IsActive)
+                            {
+                                <MudChip Class="mt-2" T="string" Color="Color.Warning" Variant="Variant.Outlined">Inactive</MudChip>
+                            }
+                            <MudDivider Class="my-3" />
+                            <MudText Typo="Typo.h5">@account.CurrentBalance.ToString("N2") @account.Currency</MudText>
+
+                            @if (account.IsOwner)
+                            {
+                                <MudStack Row="true" Class="mt-4" Spacing="2" Wrap="Wrap.Wrap">
+                                    <MudButton Variant="Variant.Outlined" OnClick="() => BeginEditAccount(account)">
+                                        Edit details
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Outlined" OnClick="() => ToggleActiveStateAsync(account)">
+                                        @(account.IsActive ? "Deactivate" : "Reactivate")
+                                    </MudButton>
+                                    <MudButton Color="Color.Error" Variant="Variant.Outlined" OnClick="() => DeleteAccountAsync(account)">
+                                        Remove
+                                    </MudButton>
+                                </MudStack>
+
+                                @if (account.IsEditing)
+                                {
+                                    <MudPaper Class="pa-3 mt-3" Elevation="0" Outlined="true">
+                                        <MudGrid>
+                                            <MudItem xs="12" md="6">
+                                                <MudTextField Label="Account name" @bind-Value="account.EditingName" Required="true" />
+                                            </MudItem>
+                                            <MudItem xs="12" md="6">
+                                                <MudTextField Label="Bank account number (optional)" @bind-Value="account.EditingBankAccountNumber" />
+                                            </MudItem>
+                                        </MudGrid>
+                                        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-3" Spacing="2">
+                                            <MudButton Variant="Variant.Text" OnClick="() => CancelEditAccount(account)">Cancel</MudButton>
+                                            <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="() => SaveAccountDetailsAsync(account)">Save details</MudButton>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+
+                                <MudDivider Class="my-3" />
+                                <MudText Typo="Typo.subtitle2">Shared with:</MudText>
+                                @if (account.SharedWithLoadFailed)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Shared viewer details unavailable.</MudText>
+                                }
+                                else if (account.SharedWith.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Nobody yet.</MudText>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var viewer in account.SharedWith)
+                                        {
+                                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">@viewer.DisplayName</MudChip>
+                                        }
+                                    </div>
+                                }
+
+                                @if (!string.IsNullOrWhiteSpace(_householdUsersLoadError))
+                                {
+                                    <MudAlert Class="mt-3" Severity="Severity.Error">Unable to load household users.</MudAlert>
+                                }
+                                else if (_householdUsers.Count == 0)
+                                {
+                                    <MudAlert Class="mt-3" Severity="Severity.Info">No other household users are available to share with.</MudAlert>
+                                }
+                                else
+                                {
+                                    <MudSelect T="string" Class="mt-3" Label="Share with household user" @bind-Value="account.SelectedShareEmail">
+                                        @foreach (var user in _householdUsers)
+                                        {
+                                            <MudSelectItem Value="@user.Email">@user.DisplayName</MudSelectItem>
+                                        }
+                                    </MudSelect>
+
+                                    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Tertiary" OnClick="() => ShareAccountAsync(account)">
+                                        Share read-only
+                                    </MudButton>
+                                }
+                            }
+                            else
+                            {
+                                <MudAlert Class="mt-3" Severity="Severity.Info">Read-only shared account.</MudAlert>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudStack>
+</MudContainer>

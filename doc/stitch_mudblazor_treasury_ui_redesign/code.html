@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      "colors": {
+        "tertiary-fixed-dim": "#ffb95f",
+        "surface-dim": "#cbdbf5",
+        "surface": "#f8f9ff",
+        "on-tertiary": "#ffffff",
+        "tertiary": "#000000",
+        "on-tertiary-container": "#b87500",
+        "secondary": "#006a61",
+        "primary": "#000000",
+        "on-surface-variant": "#45464d",
+        "inverse-primary": "#bec6e0",
+        "outline": "#76777d",
+        "tertiary-container": "#2a1700",
+        "on-secondary-container": "#006f66",
+        "outline-variant": "#c6c6cd",
+        "surface-variant": "#d3e4fe",
+        "on-primary-fixed-variant": "#3f465c",
+        "on-tertiary-fixed-variant": "#653e00",
+        "error-container": "#ffdad6",
+        "secondary-container": "#86f2e4",
+        "secondary-fixed-dim": "#6bd8cb",
+        "error": "#ba1a1a",
+        "on-primary-fixed": "#131b2e",
+        "primary-fixed-dim": "#bec6e0",
+        "surface-container": "#e5eeff",
+        "on-secondary": "#ffffff",
+        "on-error": "#ffffff",
+        "surface-container-low": "#eff4ff",
+        "tertiary-fixed": "#ffddb8",
+        "on-surface": "#0b1c30",
+        "on-tertiary-fixed": "#2a1700",
+        "surface-tint": "#565e74",
+        "primary-container": "#131b2e",
+        "on-background": "#0b1c30",
+        "background": "#f8f9ff",
+        "inverse-surface": "#213145",
+        "on-secondary-fixed": "#00201d",
+        "on-secondary-fixed-variant": "#005049",
+        "on-error-container": "#93000a",
+        "on-primary": "#ffffff",
+        "inverse-on-surface": "#eaf1ff",
+        "surface-bright": "#f8f9ff",
+        "surface-container-highest": "#d3e4fe",
+        "on-primary-container": "#7c839b",
+        "surface-container-high": "#dce9ff",
+        "primary-fixed": "#dae2fd",
+        "surface-container-lowest": "#ffffff",
+        "secondary-fixed": "#89f5e7"
+      },
+      "borderRadius": {
+        "DEFAULT": "0.125rem",
+        "lg": "0.25rem",
+        "xl": "0.5rem",
+        "full": "0.75rem"
+      },
+      "spacing": {
+        "space-lg": "1.5rem",
+        "gutter-mobile": "1rem",
+        "margin-mobile": "1rem",
+        "gutter-desktop": "1.5rem",
+        "space-sm": "0.75rem",
+        "margin-desktop": "2rem",
+        "margin-tablet": "1.5rem",
+        "space-xl": "2rem",
+        "space-2xs": "0.25rem",
+        "space-md": "1rem",
+        "space-2xl": "3rem",
+        "space-xs": "0.5rem"
+      },
+      "fontFamily": {
+        "data-mono-md": ["JetBrains Mono"],
+        "body-lg": ["Inter"],
+        "label-md": ["Inter"],
+        "headline-lg": ["Inter"],
+        "headline-sm": ["Inter"],
+        "display-lg": ["Inter"],
+        "label-xs": ["Inter"],
+        "body-md": ["Inter"],
+        "data-mono-sm": ["JetBrains Mono"],
+        "title-md": ["Inter"],
+        "headline-md": ["Inter"],
+        "body-sm": ["Inter"],
+        "data-mono-lg": ["JetBrains Mono"],
+        "display-lg-mobile": ["Inter"]
+      },
+      "fontSize": {
+        "data-mono-md": ["14px", {"lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "500"}],
+        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+        "headline-lg": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.015em", "fontWeight": "600"}],
+        "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+        "label-xs": ["11px", {"lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+        "data-mono-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+        "title-md": ["15px", {"lineHeight": "20px", "fontWeight": "600"}],
+        "headline-md": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+        "body-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+        "data-mono-lg": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "500"}],
+        "display-lg-mobile": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+      }
+    }
+  }
+};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased min-h-screen"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none"><div class="flex flex-col"><div class="h-16 px-space-md flex items-center gap-space-sm bg-surface-container-lowest"><img alt="Treasury Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1XbyBDp65LvuSzvok833MFyCbYjRo8n-i_s75uEsSZLf5T53dTGINlpfXc4KUQtft-e8bvCCF3Ctmvdsu7ecV7AWDYoMPtl38Pmt8X6DCv_8LaqE1HIwYQJAwYOKBbi6qWR7g5-Ww-3NQVCepYSYmr0dnmn0n4oKVdSiyRUmPY1nT1RxwduL4kA1LMSoTXrWGrbequfh0_Dz44aMzamY4IU8d-vsZTwHQ8kr5NKPLl0qeSbqf87NZ4Wu5o"/><div class="flex flex-col"><span class="font-title-md text-title-md text-on-surface font-bold tracking-tight leading-none">Treasury</span><span class="font-label-xs text-label-xs text-secondary font-semibold uppercase tracking-wider mt-0.5">Wealth Platform</span></div></div><div class="px-space-md py-space-xs"><div class="px-space-sm py-1 font-label-xs text-label-xs font-semibold text-outline uppercase tracking-wider">Portfolio Management</div></div><nav class="flex flex-col gap-1 px-space-xs" data-active-classes="bg-primary-container text-on-primary font-title-md shadow-[0_1px_3px_0_rgba(15,23,42,0.05)]"><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg transition-colors bg-primary-container text-on-primary font-title-md shadow-[0_1px_3px_0_rgba(15,23,42,0.05)]" data-path="dashboard" href="#"><span class="material-symbols-outlined text-lg leading-none">dashboard</span>Dashboard</a><a class="flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="accounts" href="#"><span class="material-symbols-outlined text-lg leading-none">account_balance</span>Accounts</a><a class="flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="transactions" href="#"><span class="material-symbols-outlined text-lg leading-none">receipt_long</span>Transactions</a><a class="flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="budgets" href="#"><span class="material-symbols-outlined text-lg leading-none">pie_chart</span>Budgets</a><a class="flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="bills" href="#"><span class="material-symbols-outlined text-lg leading-none">calendar_month</span>Bills</a><a class="flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="valuations" href="#"><span class="material-symbols-outlined text-lg leading-none">trending_up</span>Valuations</a><a class="flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-body-md text-body-md" data-path="rates" href="#"><span class="material-symbols-outlined text-lg leading-none">currency_exchange</span>Rates</a></nav></div><div class="p-space-xs pb-space-md"><div class="bg-surface-container-low rounded-lg p-space-sm mb-space-xs"><div class="flex items-center justify-between"><span class="font-label-xs text-label-xs text-outline uppercase font-semibold">Session Security</span><span class="h-2 w-2 rounded-full bg-secondary"></span></div><span class="font-data-mono-sm text-data-mono-sm text-on-surface font-medium block mt-1">256-bit SSL Active</span></div><a class="flex items-center gap-space-sm px-space-sm py-2.5 rounded-lg text-error hover:bg-error-container hover:text-on-error-container transition-colors font-title-md text-title-md w-full" data-path="login" href="#"><span class="material-symbols-outlined text-lg leading-none">logout</span>Sign Out</a></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-lg"><nav class="hidden xl:flex items-center gap-space-md h-full" data-active-classes="text-on-surface font-title-md font-semibold border-b-2 border-primary"><a aria-current="page" class="transition-colors h-full flex items-center px-1 text-on-surface font-title-md font-semibold border-b-2 border-primary" data-path="dashboard" href="#">Dashboard</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md h-full flex items-center px-1" data-path="accounts" href="#">Accounts</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md h-full flex items-center px-1" data-path="transactions" href="#">Transactions</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md h-full flex items-center px-1" data-path="budgets" href="#">Budgets</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md h-full flex items-center px-1" data-path="bills" href="#">Bills</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md h-full flex items-center px-1" data-path="valuations" href="#">Valuations</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md h-full flex items-center px-1" data-path="rates" href="#">Rates</a></nav><div class="flex items-center gap-space-md ml-auto"><div class="inline-flex items-center p-0.5 rounded-full bg-surface-container-high shadow-inner"><button class="px-space-sm py-1 rounded-full text-on-primary bg-primary font-label-md text-label-md shadow-[0_1px_3px_0_rgba(15,23,42,0.05)] transition-all" type="button">PLN</button><button class="px-space-sm py-1 rounded-full text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-all" type="button">EUR</button></div><button aria-label="Notifications" class="relative p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center justify-center" type="button"><span class="material-symbols-outlined text-xl leading-none">notifications</span><span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-secondary ring-2 ring-surface"></span></button><div class="flex items-center gap-space-xs pl-space-xs py-1 rounded-lg hover:bg-surface-container-high cursor-pointer transition-colors group"><img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-1 ring-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAkOsNQsKmCDeUbdZeFfyUw3Oko2NwMWqDgxuFGm7S2DdmwGY62Qt1qzSdDTblXQDQGd7lZPv0FfrGKB589o7MIRXq5QgY3Vy0fQw_cdSenHuHUfHX5nWf1bBIn62BgAVsQcwkyIuLl84nYMKquTrrindjQLo2BdVR2cGnafwplohLEgR1ny9pklwYjWwr_IZUTcLEnExg8k3FZY68JmrYDEDmNyfgo2ugwKGw-5jHPXIL6deaAv-tF"/><div class="hidden md:flex flex-col text-left"><span class="font-label-md text-label-md text-on-surface font-semibold leading-tight">Julian Vance</span><span class="font-label-xs text-label-xs text-outline leading-none">Private Tier</span></div><span class="material-symbols-outlined text-on-surface-variant text-base leading-none group-hover:text-on-surface transition-transform">arrow_drop_down</span></div></div></header><main class="w-full pt-16 bg-surface px-space-lg py-space-lg min-h-screen"><div class="flex flex-col w-full gap-space-lg pb-space-2xl">
+<!-- Top Bar: Greeting, Period Selector, Quick Primary Actions -->
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Household dashboard</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-xs text-label-xs font-semibold">Live Sync</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">A quick view of balances, cash liquidity, and scheduled commitments for your family budget.</p>
+</div>
+<div class="flex flex-wrap items-center gap-space-sm">
+<!-- Period Selector Dropdown Pill -->
+<div class="inline-flex items-center gap-space-xs bg-surface-container-low px-space-sm py-2 rounded-lg text-on-surface cursor-pointer hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-lg text-secondary">calendar_today</span>
+<span class="font-label-md text-label-md font-semibold">This Month: Oct 2024</span>
+<span class="material-symbols-outlined text-base text-outline">expand_more</span>
+</div>
+<!-- Secondary Export / Audit Tool -->
+<button class="inline-flex items-center justify-center p-2 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container transition-colors" title="Export Ledger" type="button">
+<span class="material-symbols-outlined text-lg">file_download</span>
+</button>
+<!-- Primary Action: Add Transaction -->
+<button class="inline-flex items-center gap-space-xs px-space-md py-2.5 rounded-lg bg-primary text-on-primary font-title-md text-title-md font-semibold shadow-sm hover:bg-primary-container transition-all active:scale-95" type="button">
+<span class="material-symbols-outlined text-lg leading-none">add_circle</span>
+<span>Add Transaction</span>
+</button>
+</div>
+</div>
+<!-- Metric / Balance Cards: 4-Column Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-space-md">
+<!-- Card 1: Total PLN -->
+<div class="flex flex-col justify-between bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute -right-3 -top-3 w-16 h-16 rounded-full bg-secondary/5 group-hover:scale-125 transition-transform pointer-events-none"></div>
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">Total PLN Reserve</span>
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-base">account_balance_wallet</span>
+</div>
+</div>
+<div>
+<div class="flex items-baseline gap-1">
+<span class="font-data-mono-lg text-display-lg text-on-surface font-bold tracking-tight">30,260.58</span>
+<span class="font-data-mono-sm text-data-mono-sm text-outline font-semibold">PLN</span>
+</div>
+<div class="flex items-center gap-space-xs mt-space-xs">
+<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-xs text-label-xs font-semibold">
+<span class="material-symbols-outlined text-xs">arrow_drop_up</span>
+            +3.4%
+          </span>
+<span class="font-body-sm text-body-sm text-outline">Across 3 active accounts</span>
+</div>
+</div>
+</div>
+<!-- Card 2: Total EUR -->
+<div class="flex flex-col justify-between bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute -right-3 -top-3 w-16 h-16 rounded-full bg-surface-container-high/60 group-hover:scale-125 transition-transform pointer-events-none"></div>
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">Total EUR Vault</span>
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-base">euro</span>
+</div>
+</div>
+<div>
+<div class="flex items-baseline gap-1">
+<span class="font-data-mono-lg text-display-lg text-on-surface font-bold tracking-tight">2,840.00</span>
+<span class="font-data-mono-sm text-data-mono-sm text-outline font-semibold">EUR</span>
+</div>
+<div class="flex items-center justify-between mt-space-xs">
+<span class="font-body-sm text-body-sm text-outline font-medium">≈ 12,240.40 PLN</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-xs text-label-xs font-semibold">+120.00 EUR</span>
+</div>
+</div>
+</div>
+<!-- Card 3: Cash Flow -->
+<div class="flex flex-col justify-between bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">Net Cash Flow</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-xs text-label-xs font-semibold">
+          Balanced
+        </span>
+</div>
+<div>
+<div class="flex items-baseline gap-1">
+<span class="font-data-mono-lg text-display-lg text-on-surface font-bold tracking-tight">−4.00</span>
+<span class="font-data-mono-sm text-data-mono-sm text-outline font-semibold">PLN</span>
+</div>
+<!-- Income vs Spend Mini Indicator -->
+<div class="mt-space-xs flex flex-col gap-1">
+<div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden flex">
+<div class="h-full bg-secondary" style="width: 49.9%;"></div>
+<div class="h-full bg-primary-container" style="width: 50.1%;"></div>
+</div>
+<div class="flex justify-between font-label-xs text-label-xs text-on-surface-variant font-medium">
+<span class="text-secondary font-semibold">In: 8,450 PLN</span>
+<span class="text-on-surface-variant">Out: 8,454 PLN</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 4: Bills Due -->
+<div class="flex flex-col justify-between bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider font-semibold">Bills Due</span>
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-base">notifications_active</span>
+</div>
+</div>
+<div>
+<div class="flex items-baseline gap-1">
+<span class="font-data-mono-lg text-display-lg text-on-surface font-bold tracking-tight">2</span>
+<span class="font-label-md text-label-md text-outline font-semibold uppercase">Upcoming</span>
+</div>
+<div class="mt-space-xs flex items-center justify-between bg-surface-container-low px-2 py-1.5 rounded-lg">
+<div class="flex flex-col truncate pr-2">
+<span class="font-label-xs text-label-xs text-on-surface font-semibold truncate">Fiber Internet</span>
+<span class="font-label-xs text-label-xs text-outline">Due in 3 days</span>
+</div>
+<span class="font-data-mono-sm text-data-mono-sm font-bold text-error">120 PLN</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Two-Column Mid Section: Transactions (65%) & Actions/Summary (35%) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+<!-- Left Column: Transactions List (8 Cols = ~66%) -->
+<div class="lg:col-span-8 flex flex-col bg-surface-container-lowest rounded-xl shadow-sm p-space-lg gap-space-md">
+<!-- Card Header + Filter Controls -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-xs">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Recent Transactions</h2>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-xs text-label-xs font-semibold">5 records</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-2.5 text-base text-outline pointer-events-none">search</span>
+<input class="pl-8 pr-3 py-1.5 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container transition-all w-40 sm:w-56" placeholder="Search merchant..." type="text"/>
+</div>
+<button class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-lg">filter_list</span>
+</button>
+</div>
+</div>
+<!-- Transaction Table / Row Structure -->
+<div class="flex flex-col gap-1">
+<!-- Item 1 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg hover:bg-surface-container-low transition-colors group">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-secondary-container/40 flex items-center justify-center text-secondary shrink-0">
+<span class="material-symbols-outlined text-xl">shopping_cart</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-md text-title-md text-on-surface font-semibold truncate">Grocery Store (teeest)</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-label-xs text-label-xs text-on-surface-variant font-medium">Groceries</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Oct 24, 2024 • Checking Acc</span>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="font-data-mono-md text-data-mono-md font-bold text-secondary">+4.00 PLN</span>
+<span class="block font-label-xs text-label-xs text-outline">Settled</span>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg hover:bg-surface-container-low transition-colors group">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-on-surface shrink-0">
+<span class="material-symbols-outlined text-xl">work</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-md text-title-md text-on-surface font-semibold truncate">Consulting Services (asdfadsf)</span>
+<span class="px-1.5 py-0.2 rounded bg-secondary-container text-on-secondary-container font-label-xs text-label-xs font-medium">Income</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Oct 22, 2024 • EUR Account</span>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="font-data-mono-md text-data-mono-md font-bold text-secondary">+43,434.00 EUR</span>
+<span class="block font-label-xs text-label-xs text-outline">Wire Transfer</span>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg hover:bg-surface-container-low transition-colors group">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-xl">home</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-md text-title-md text-on-surface font-semibold truncate">Apartment Rent &amp; Mortgage</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-label-xs text-label-xs text-on-surface-variant font-medium">Housing</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Oct 15, 2024 • Main PLN</span>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="font-data-mono-md text-data-mono-md font-bold text-on-surface">−3,200.00 PLN</span>
+<span class="block font-label-xs text-label-xs text-outline">Standing Order</span>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg hover:bg-surface-container-low transition-colors group">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-xl">router</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-md text-title-md text-on-surface font-semibold truncate">Fiber Optic Internet</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-label-xs text-label-xs text-on-surface-variant font-medium">Utilities</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Oct 12, 2024 • Main PLN</span>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="font-data-mono-md text-data-mono-md font-bold text-on-surface">−89.90 PLN</span>
+<span class="block font-label-xs text-label-xs text-outline">Direct Debit</span>
+</div>
+</div>
+<!-- Item 5 -->
+<div class="flex items-center justify-between p-space-sm rounded-lg hover:bg-surface-container-low transition-colors group">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-xl">movie</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-title-md text-title-md text-on-surface font-semibold truncate">Cinema &amp; Streaming</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-label-xs text-label-xs text-on-surface-variant font-medium">Leisure</span>
+</div>
+<span class="font-body-sm text-body-sm text-outline">Oct 10, 2024 • Visa Card</span>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="font-data-mono-md text-data-mono-md font-bold text-on-surface">−64.00 PLN</span>
+<span class="block font-label-xs text-label-xs text-outline">Card POS</span>
+</div>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="flex items-center justify-between pt-space-xs mt-space-xs">
+<span class="font-label-xs text-label-xs text-outline">Showing 5 of 64 recent movements</span>
+<a class="inline-flex items-center gap-1 font-title-md text-title-md font-semibold text-secondary hover:text-on-secondary-container transition-colors" href="#">
+<span>View all transactions</span>
+<span class="material-symbols-outlined text-base">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Right Column: Quick Actions & Cash Summary (4 Cols = ~34%) -->
+<div class="lg:col-span-4 flex flex-col gap-space-lg">
+<!-- Quick Actions Card -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl shadow-sm p-space-lg gap-space-md">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Quick Actions</h2>
+<span class="material-symbols-outlined text-outline">touch_app</span>
+</div>
+<div class="flex flex-col gap-space-xs">
+<!-- Primary Filled Action -->
+<button class="w-full flex items-center justify-between px-space-md py-3 rounded-lg bg-primary-container text-on-primary font-title-md text-title-md font-semibold shadow-sm hover:opacity-95 transition-all group" type="button">
+<span class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-lg group-hover:scale-110 transition-transform">account_balance</span>
+<span>Create Account</span>
+</span>
+<span class="material-symbols-outlined text-base">chevron_right</span>
+</button>
+<!-- Secondary Outlined Button -->
+<button class="w-full flex items-center justify-between px-space-md py-3 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container font-title-md text-title-md font-semibold transition-all group" type="button">
+<span class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-lg text-secondary group-hover:rotate-45 transition-transform">tune</span>
+<span>Set Budgets</span>
+</span>
+<span class="material-symbols-outlined text-base text-outline">chevron_right</span>
+</button>
+<!-- Text Action: View Rates -->
+<button class="w-full flex items-center justify-between px-space-md py-3 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container font-title-md text-title-md font-semibold transition-all group" type="button">
+<span class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-lg text-outline group-hover:rotate-180 transition-transform">currency_exchange</span>
+<span>View Rates &amp; FX</span>
+</span>
+<span class="material-symbols-outlined text-base text-outline">chevron_right</span>
+</button>
+<!-- Supplementary Expense Splitter -->
+<button class="w-full flex items-center justify-between px-space-md py-3 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container font-title-md text-title-md font-semibold transition-all group" type="button">
+<span class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-lg text-outline">receipt_long</span>
+<span>Upload Receipt</span>
+</span>
+<span class="material-symbols-outlined text-base text-outline">upload</span>
+</button>
+</div>
+</div>
+<!-- Monthly Cash Summary Card (Visual Donut Indicator) -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl shadow-sm p-space-lg gap-space-md">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Monthly Burn</h2>
+<span class="font-label-xs text-label-xs text-secondary font-semibold uppercase tracking-wider">14 Days Left</span>
+</div>
+<div class="flex items-center gap-space-md">
+<!-- Inline Donut SVG Meter -->
+<div class="relative w-28 h-28 shrink-0 flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<path class="text-surface-container-high" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3.5"></path>
+<path class="text-secondary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="58, 100" stroke-linecap="round" stroke-width="3.8"></path>
+</svg>
+<div class="absolute flex flex-col items-center justify-center text-center">
+<span class="font-data-mono-md text-data-mono-md font-bold text-on-surface leading-none">58%</span>
+<span class="font-label-xs text-label-xs text-outline leading-none mt-0.5">Used</span>
+</div>
+</div>
+<div class="flex flex-col gap-space-xs flex-1">
+<div class="flex flex-col">
+<span class="font-label-xs text-label-xs text-outline font-semibold uppercase">Total Budget Cap</span>
+<span class="font-data-mono-md text-data-mono-md text-on-surface font-bold">7,200.00 PLN</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-xs text-label-xs text-outline font-semibold uppercase">Remaining Target</span>
+<span class="font-data-mono-md text-data-mono-md text-secondary font-bold">3,024.00 PLN</span>
+</div>
+<div class="w-full bg-surface-container-high rounded-full h-1 mt-1">
+<div class="bg-secondary h-1 rounded-full" style="width: 58%"></div>
+</div>
+</div>
+</div>
+<div class="p-space-xs bg-surface-container-low rounded-lg flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant font-medium">Daily burn pacing:</span>
+<span class="font-data-mono-sm text-data-mono-sm font-semibold text-on-surface">216 PLN / day</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Full-Width Section: Budget Health -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl shadow-sm p-space-lg gap-space-md">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Budget Health</h2>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-xs text-label-xs font-semibold">100% On Track</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Allocated spending caps vs. actual execution across core family categories.</p>
+</div>
+<div class="flex items-center gap-space-xs">
+<button class="inline-flex items-center gap-space-xs px-space-md py-2 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container transition-colors font-title-md text-title-md font-semibold" type="button">
+<span class="material-symbols-outlined text-base text-secondary">tune</span>
+<span>Manage Budgets</span>
+</button>
+</div>
+</div>
+<!-- Category Progress Meters: 4 Sub-Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-space-md pt-space-xs">
+<!-- Budget 1: Groceries -->
+<div class="flex flex-col p-space-md rounded-xl bg-surface-container-low gap-space-xs hover:bg-surface-container transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-base text-secondary">shopping_basket</span>
+<span class="font-title-md text-title-md text-on-surface font-semibold">Groceries</span>
+</div>
+<span class="font-label-xs text-label-xs font-semibold text-secondary">0%</span>
+</div>
+<div class="flex items-baseline justify-between mt-1">
+<span class="font-data-mono-md text-data-mono-md font-bold text-on-surface">0.00 PLN</span>
+<span class="font-data-mono-sm text-data-mono-sm text-outline">/ 2,200.00 PLN</span>
+</div>
+<!-- Meter Track -->
+<div class="w-full h-2 rounded-full bg-surface-container-high overflow-hidden my-1">
+<div class="h-full bg-secondary rounded-full" style="width: 2%;"></div>
+</div>
+<div class="flex items-center justify-between font-label-xs text-label-xs text-outline">
+<span>Safe tier</span>
+<span class="text-secondary font-semibold">2,200.00 PLN left</span>
+</div>
+</div>
+<!-- Budget 2: Housing -->
+<div class="flex flex-col p-space-md rounded-xl bg-surface-container-low gap-space-xs hover:bg-surface-container transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-base text-on-surface">apartment</span>
+<span class="font-title-md text-title-md text-on-surface font-semibold">Housing</span>
+</div>
+<span class="font-label-xs text-label-xs font-semibold text-secondary">0%</span>
+</div>
+<div class="flex items-baseline justify-between mt-1">
+<span class="font-data-mono-md text-data-mono-md font-bold text-on-surface">0.00 PLN</span>
+<span class="font-data-mono-sm text-data-mono-sm text-outline">/ 3,200.00 PLN</span>
+</div>
+<!-- Meter Track -->
+<div class="w-full h-2 rounded-full bg-surface-container-high overflow-hidden my-1">
+<div class="h-full bg-secondary rounded-full" style="width: 2%;"></div>
+</div>
+<div class="flex items-center justify-between font-label-xs text-label-xs text-outline">
+<span>Fixed expense</span>
+<span class="text-secondary font-semibold">3,200.00 PLN left</span>
+</div>
+</div>
+<!-- Budget 3: Leisure -->
+<div class="flex flex-col p-space-md rounded-xl bg-surface-container-low gap-space-xs hover:bg-surface-container transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-base text-on-surface-variant">theater_comedy</span>
+<span class="font-title-md text-title-md text-on-surface font-semibold">Leisure</span>
+</div>
+<span class="font-label-xs text-label-xs font-semibold text-secondary">0%</span>
+</div>
+<div class="flex items-baseline justify-between mt-1">
+<span class="font-data-mono-md text-data-mono-md font-bold text-on-surface">0.00 PLN</span>
+<span class="font-data-mono-sm text-data-mono-sm text-outline">/ 900.00 PLN</span>
+</div>
+<!-- Meter Track -->
+<div class="w-full h-2 rounded-full bg-surface-container-high overflow-hidden my-1">
+<div class="h-full bg-secondary rounded-full" style="width: 2%;"></div>
+</div>
+<div class="flex items-center justify-between font-label-xs text-label-xs text-outline">
+<span>Discretionary</span>
+<span class="text-secondary font-semibold">900.00 PLN left</span>
+</div>
+</div>
+<!-- Budget 4: Utilities -->
+<div class="flex flex-col p-space-md rounded-xl bg-surface-container-low gap-space-xs hover:bg-surface-container transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-base text-on-surface-variant">power</span>
+<span class="font-title-md text-title-md text-on-surface font-semibold">Utilities</span>
+</div>
+<span class="font-label-xs text-label-xs font-semibold text-secondary">0%</span>
+</div>
+<div class="flex items-baseline justify-between mt-1">
+<span class="font-data-mono-md text-data-mono-md font-bold text-on-surface">0.00 PLN</span>
+<span class="font-data-mono-sm text-data-mono-sm text-outline">/ 900.00 PLN</span>
+</div>
+<!-- Meter Track -->
+<div class="w-full h-2 rounded-full bg-surface-container-high overflow-hidden my-1">
+<div class="h-full bg-secondary rounded-full" style="width: 2%;"></div>
+</div>
+<div class="flex items-center justify-between font-label-xs text-label-xs text-outline">
+<span>Recurring</span>
+<span class="text-secondary font-semibold">900.00 PLN left</span>
+</div>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

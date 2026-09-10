@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --mud-palette-primary: #1C5B8C;
+            --mud-palette-secondary: #52B69A;
+            --mud-palette-tertiary: #F4B942;
+            --mud-palette-background: #F5F7FB;
+            --mud-palette-surface: #FFFFFF;
+            --mud-palette-appbar-background: #0F172A;
+            --mud-palette-appbar-text: #F8FAFC;
+            --mud-palette-text-primary: #122033;
+            --mud-palette-text-secondary: #4B5563;
+            --mud-palette-drawer-background: #111827;
+            --mud-palette-drawer-text: #F9FAFB;
+            --mud-palette-error: #E11D48;
+            --mud-palette-success: #10B981;
+            --mud-palette-warning: #F59E0B;
+            --mud-palette-info: #3B82F6;
+        }
+
+        body {
+            background: var(--mud-palette-background);
+            color: var(--mud-palette-text-primary);
+        }
+
+        .field-input {
+            width: 100%;
+            padding: 0.9rem 1rem;
+            border: 1px solid rgba(17, 24, 39, 0.15);
+            border-radius: 12px;
+            background: white;
+            font-size: 1rem;
+            color: var(--mud-palette-text-primary);
+            box-sizing: border-box;
+        }
+
+        .field-input:focus {
+            outline: 2px solid rgba(28, 91, 140, 0.2);
+            border-color: var(--mud-palette-primary);
+        }
+    </style>
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+</body>
+</html>
