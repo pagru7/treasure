@@ -1,6 +1,7 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Treasury.App.Application.Transactions;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
@@ -56,6 +57,20 @@ public sealed class GetTransactionsEndpoint(TreasuryDbContext db, UserManager<Ap
             })
             .ToListAsync(ct);
 
-        await SendOkAsync(transactions, ct);
+        var response = transactions.Select(x => new
+        {
+            x.Id,
+            x.AccountId,
+            x.Description,
+            x.Category,
+            x.Amount,
+            x.Currency,
+            Type = TransactionBalanceMath.ToApiType(x.Type),
+            x.TransactionDate,
+            x.BalanceAfterTransaction,
+            x.Tags
+        });
+
+        await SendOkAsync(response, ct);
     }
 }

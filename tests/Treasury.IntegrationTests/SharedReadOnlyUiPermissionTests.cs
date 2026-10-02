@@ -292,7 +292,8 @@ public class SharedReadOnlyUiPermissionTests
         {
             Email = email,
             Password = password,
-            ConfirmPassword = password
+            ConfirmPassword = password,
+            HouseholdNameOrId = $"household-{Guid.NewGuid():N}"
         });
 
         registerResponse.StatusCode.Should().Be(HttpStatusCode.Redirect);

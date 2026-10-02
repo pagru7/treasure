@@ -45,6 +45,7 @@ public sealed class GetAccountsEndpoint(TreasuryDbContext db, UserManager<Applic
                 AccountType = x.AccountType,
                 IsActive = x.IsActive,
                 BankAccountNumber = x.BankAccountNumber,
+                Description = x.Description,
                 CurrentBalance = x.CurrentBalance,
                 IsReadOnly = x.OwnerUserId != user.Id
             })

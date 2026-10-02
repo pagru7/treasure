@@ -54,15 +54,18 @@ public sealed class BalanceCorrectionEndpoint(
         account.CurrentBalance = request.NewBalance;
         account.UpdatedAt = utcNow;
 
+        var correctionCategory = await ResolveSystemCategoryAsync(user.HouseholdId, "Correction", ct);
+
         db.Transactions.Add(new Transaction
         {
             HouseholdId = user.HouseholdId,
             AccountId = account.Id,
+            CategoryId = correctionCategory.Id,
             Description = string.IsNullOrWhiteSpace(request.Description) ? "Balance correction" : request.Description.Trim(),
-            Category = "Correction",
+            Category = correctionCategory.Name,
             Amount = delta,
             Currency = account.Currency,
-            Type = "balance-correction",
+            Type = TransactionType.BalanceCorrection,
             TransactionDate = utcNow,
             CreatedAt = utcNow,
             UpdatedAt = utcNow
@@ -90,5 +93,35 @@ public sealed class BalanceCorrectionEndpoint(
             account.Id,
             account.CurrentBalance
         }, ct);
+    }
+
+    private async Task<Category> ResolveSystemCategoryAsync(Guid householdId, string name, CancellationToken ct)
+    {
+        var existing = await db.Categories
+            .SingleOrDefaultAsync(x => x.HouseholdId == householdId && x.Name.ToLower() == name.ToLower(), ct);
+        if (existing is not null)
+        {
+            if (!existing.IsActive)
+            {
+                existing.IsActive = true;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(ct);
+            }
+
+            return existing;
+        }
+
+        var created = new Category
+        {
+            HouseholdId = householdId,
+            Name = name,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.Categories.Add(created);
+        await db.SaveChangesAsync(ct);
+        return created;
     }
 }

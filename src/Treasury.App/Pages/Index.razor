@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
 @inject TreasuryDbContext DbContext
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
@@ -103,10 +104,14 @@
             return;
         }
 
-        var householdId = await DbContext.Households
-            .OrderBy(x => x.Id)
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+        if (user is null)
+        {
+            Navigation.NavigateTo("/auth/login", forceLoad: true);
+            return;
+        }
+
+        var householdId = user.HouseholdId;
 
         var accounts = await DbContext.Accounts
             .Where(x => x.HouseholdId == householdId)
@@ -138,7 +143,7 @@
 
         _recentCashFlow = _recentTransactions
             .Where(x => x.Currency == "PLN")
-            .Sum(x => x.Type == "expense" ? -x.Amount : x.Type == "income" ? x.Amount : 0m);
+            .Sum(x => x.Type == TransactionType.Expense ? -x.Amount : x.Type == TransactionType.Income ? x.Amount : 0m);
 
         _billsDueCount = await DbContext.Bills
             .Where(x => x.HouseholdId == householdId && !x.IsPaid)
@@ -146,7 +151,7 @@
 
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var thisMonthExpenses = await DbContext.Transactions
-            .Where(x => x.HouseholdId == householdId && x.TransactionDate >= monthStart && x.Type == "expense")
+            .Where(x => x.HouseholdId == householdId && x.TransactionDate >= monthStart && x.Type == TransactionType.Expense)
             .ToListAsync();
 
         var budgets = await DbContext.BudgetCategories
@@ -154,15 +159,20 @@
             .OrderBy(x => x.Name)
             .ToListAsync();
 
+        var categoryLookup = await DbContext.Categories
+            .Where(x => x.HouseholdId == householdId)
+            .ToDictionaryAsync(x => x.Id, x => x.Name);
+
         _budgetStatus.Clear();
         foreach (var budget in budgets)
         {
             var spent = thisMonthExpenses
-                .Where(x => x.Category.Equals(budget.Name, StringComparison.OrdinalIgnoreCase))
+                .Where(x => x.CategoryId == budget.CategoryId)
                 .Sum(x => x.Amount);
+            var budgetName = categoryLookup.GetValueOrDefault(budget.CategoryId, budget.Name);
 
             _budgetStatus.Add(new BudgetStatusItem(
-                budget.Name,
+                budgetName,
                 budget.MonthlyLimit,
                 budget.Currency,
                 spent,

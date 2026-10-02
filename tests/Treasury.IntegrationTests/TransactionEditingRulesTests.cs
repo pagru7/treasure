@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
 namespace Treasury.IntegrationTests;
@@ -115,6 +116,63 @@ public class TransactionEditingRulesTests
     }
 
     [Fact]
+    public async Task Edit_NonLatest_Allows_Description_Category_And_Tags()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var accountId = await CreateOwnedAccountAsync(app, "Historical editable fields");
+        var firstDate = DateTime.UtcNow.AddDays(-2);
+        var firstTransactionId = await CreateTransactionAsync(client, accountId, "First", 10m, "expense", firstDate);
+        _ = await CreateTransactionAsync(client, accountId, "Second", 20m, "expense", DateTime.UtcNow.AddDays(-1));
+
+        await using var setupScope = app.Services.CreateAsyncScope();
+        var setupDb = setupScope.ServiceProvider.GetRequiredService<TreasuryDbContext>();
+        var user = await setupDb.Users.SingleAsync();
+
+        var updatedCategory = new Category
+        {
+            HouseholdId = user.HouseholdId,
+            Name = "Updated",
+            IsActive = true
+        };
+        var tag = new Tag
+        {
+            HouseholdId = user.HouseholdId,
+            Name = "bill",
+            Color = "#3B82F6"
+        };
+
+        setupDb.Categories.Add(updatedCategory);
+        setupDb.Tags.Add(tag);
+        await setupDb.SaveChangesAsync();
+
+        var response = await client.PutAsJsonAsync($"/api/transactions/{firstTransactionId}", new
+        {
+            Id = firstTransactionId,
+            Description = "First updated",
+            CategoryId = updatedCategory.Id,
+            TagIds = new[] { tag.Id }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var assertScope = app.Services.CreateAsyncScope();
+        var assertDb = assertScope.ServiceProvider.GetRequiredService<TreasuryDbContext>();
+        var updated = await assertDb.Transactions.SingleAsync(x => x.Id == firstTransactionId);
+        var updatedTags = await assertDb.TransactionTags.Where(x => x.TransactionId == firstTransactionId).ToListAsync();
+
+        updated.Description.Should().Be("First updated");
+        updated.CategoryId.Should().Be(updatedCategory.Id);
+        updated.Category.Should().Be("Updated");
+        updated.Amount.Should().Be(10m);
+        updated.Type.Should().Be(TransactionType.Expense);
+        updated.TransactionDate.Date.Should().Be(firstDate.Date);
+        updatedTags.Select(x => x.TagId).Should().BeEquivalentTo([tag.Id]);
+    }
+
+    [Fact]
     public async Task Edit_Latest_Allows_Amount_And_Recomputes_Balance()
     {
         await using var app = new TreasuryHostFactory();
@@ -179,7 +237,7 @@ public class TransactionEditingRulesTests
         var transaction = await db.Transactions.SingleAsync(x => x.Id == firstTransactionId);
         transaction.Description.Should().Be("First renamed");
         transaction.Amount.Should().Be(10m);
-        transaction.Type.Should().Be("expense");
+        transaction.Type.Should().Be(TransactionType.Expense);
         transaction.TransactionDate.Date.Should().Be(firstTransactionDate.Date);
     }
 
@@ -280,7 +338,8 @@ public class TransactionEditingRulesTests
         {
             Email = email,
             Password = password,
-            ConfirmPassword = password
+            ConfirmPassword = password,
+            HouseholdNameOrId = $"household-{Guid.NewGuid():N}"
         });
         registerResponse.StatusCode.Should().Be(HttpStatusCode.Redirect);
 
@@ -330,5 +389,29 @@ public class TransactionEditingRulesTests
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return json.RootElement.GetProperty("id").GetGuid();
+    }
+
+    private static async Task<Guid> CreateOwnedAccountAsync(TreasuryHostFactory app, string name)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TreasuryDbContext>();
+        var user = await db.Users.SingleAsync();
+
+        var account = new Treasury.App.Domain.Account
+        {
+            HouseholdId = user.HouseholdId,
+            OwnerUserId = user.Id,
+            Name = name,
+            Currency = "PLN",
+            AccountType = "cash-wallet",
+            IsActive = true,
+            CurrentBalance = 0m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.Accounts.Add(account);
+        await db.SaveChangesAsync();
+        return account.Id;
     }
 }

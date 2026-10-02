@@ -19,7 +19,7 @@ public class TreasuryDbContext : IdentityDbContext<ApplicationUser>
         }
 
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-            ?? "Host=localhost;Database=treasury;Username=postgres;Password=postgres";
+            ?? "Host=localhost;Port=5432;Database=treasury;Username=treasury;Password=treasury";
 
         optionsBuilder.UseNpgsql(connectionString);
     }
@@ -60,6 +60,9 @@ public class TreasuryDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<Account>()
             .Property(x => x.BankAccountNumber)
             .HasMaxLength(34);
+
+        modelBuilder.Entity<PreciousMetalValueEntry>()
+            .HasIndex(x => new { x.PreciousMetalAssetId, x.ValueDate });
     }
 
     public DbSet<Household> Households => Set<Household>();
@@ -68,10 +71,13 @@ public class TreasuryDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<VisibilityRule> VisibilityRules => Set<VisibilityRule>();
     public DbSet<Transfer> Transfers => Set<Transfer>();
     public DbSet<CurrencyRate> CurrencyRates => Set<CurrencyRate>();
-    public DbSet<AssetValuation> AssetValuations => Set<AssetValuation>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TransactionTag> TransactionTags => Set<TransactionTag>();
+    public DbSet<Category> Categories => Set<Category>();
     public DbSet<BudgetCategory> BudgetCategories => Set<BudgetCategory>();
     public DbSet<Bill> Bills => Set<Bill>();
+    public DbSet<PreciousMetalAsset> PreciousMetalAssets => Set<PreciousMetalAsset>();
+    public DbSet<PreciousMetalValueEntry> PreciousMetalValueEntries => Set<PreciousMetalValueEntry>();
+    public DbSet<FeedbackItem> FeedbackItems => Set<FeedbackItem>();
 }

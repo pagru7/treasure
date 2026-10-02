@@ -1,0 +1,165 @@
+@page "/precious-metals"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Precious Metals</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Track each item by purchase price and latest value.
+        </MudText>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudText Typo="Typo.h6">Add item</MudText>
+            <MudGrid Class="mt-2">
+                <MudItem xs="12" md="4">
+                    <MudTextField Label="Name" @bind-Value="_newItem.Name" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudNumericField T="decimal" Label="Purchase price" @bind-Value="_newItem.PurchasePrice" Min="0.01m" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudDatePicker Label="Purchase date" @bind-Date="_newItem.PurchaseDate" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudNumericField T="decimal" Label="Current value" @bind-Value="_newItem.CurrentValue" Min="0.01m" />
+                </MudItem>
+                <MudItem xs="12" md="1" Class="d-flex align-end">
+                    <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="CreateItemAsync">Add</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            @if (_items.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">No precious metal items yet.</MudAlert>
+            }
+            else
+            {
+                <MudTable T="PreciousMetalAsset" Items="_items" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Purchase</MudTh>
+                        <MudTh>Purchase date</MudTh>
+                        <MudTh>Current value</MudTh>
+                        <MudTh>Value date</MudTh>
+                        <MudTh>Profit</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">
+                            <MudLink Href="@($"/precious-metals/{context.Id}")">@context.Name</MudLink>
+                        </MudTd>
+                        <MudTd DataLabel="Purchase">@context.PurchasePrice.ToString("N2") PLN</MudTd>
+                        <MudTd DataLabel="Purchase date">@context.PurchaseDate.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+                        <MudTd DataLabel="Current value">@context.CurrentValue.ToString("N2") PLN</MudTd>
+                        <MudTd DataLabel="Value date">@context.CurrentValueDate.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+                        <MudTd DataLabel="Profit">@GetProfit(context).ToString("N2") PLN</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<PreciousMetalAsset> _items = new();
+    private readonly NewPreciousMetalForm _newItem = new()
+    {
+        PurchaseDate = DateTime.UtcNow,
+        CurrentValueDate = DateTime.UtcNow
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(auth.User);
+    }
+
+    private async Task LoadAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        _items.Clear();
+
+        if (user is null)
+        {
+            return;
+        }
+
+        var items = await DbContext.PreciousMetalAssets
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+
+        _items.AddRange(items);
+    }
+
+    private async Task CreateItemAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in.", Severity.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newItem.Name) || _newItem.PurchasePrice <= 0m || _newItem.CurrentValue <= 0m)
+        {
+            Snackbar.Add("Provide valid name, purchase price and current value.", Severity.Warning);
+            return;
+        }
+
+        var utcNow = DateTime.UtcNow;
+        var purchaseDate = _newItem.PurchaseDate ?? utcNow;
+        var created = new PreciousMetalAsset
+        {
+            HouseholdId = user.HouseholdId,
+            Name = _newItem.Name.Trim(),
+            PurchasePrice = _newItem.PurchasePrice,
+            PurchaseDate = purchaseDate,
+            CurrentValue = _newItem.CurrentValue,
+            CurrentValueDate = utcNow,
+            CreatedAt = utcNow,
+            UpdatedAt = utcNow
+        };
+
+        DbContext.PreciousMetalAssets.Add(created);
+        DbContext.PreciousMetalValueEntries.Add(new PreciousMetalValueEntry
+        {
+            PreciousMetalAssetId = created.Id,
+            Value = created.CurrentValue,
+            ValueDate = utcNow,
+            CreatedAt = utcNow
+        });
+
+        await DbContext.SaveChangesAsync();
+
+        _newItem.Name = string.Empty;
+        _newItem.PurchasePrice = 0m;
+        _newItem.CurrentValue = 0m;
+        _newItem.PurchaseDate = DateTime.UtcNow;
+        _newItem.CurrentValueDate = DateTime.UtcNow;
+
+        Snackbar.Add("Precious metal item added.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private static decimal GetProfit(PreciousMetalAsset item) => item.CurrentValue - item.PurchasePrice;
+
+    private sealed class NewPreciousMetalForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public decimal PurchasePrice { get; set; }
+        public DateTime? PurchaseDate { get; set; }
+        public decimal CurrentValue { get; set; }
+        public DateTime? CurrentValueDate { get; set; }
+    }
+}

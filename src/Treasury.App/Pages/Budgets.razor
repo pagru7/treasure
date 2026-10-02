@@ -1,6 +1,8 @@
 @page "/budgets"
 @attribute [Authorize]
 @inject TreasuryDbContext DbContext
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
 @inject ISnackbar Snackbar
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
@@ -11,7 +13,12 @@
         <MudPaper Class="pa-4 rounded-xl" Elevation="2">
             <MudGrid>
                 <MudItem xs="12" md="3">
-                    <MudTextField Label="Category" @bind-Value="_newBudget.Name" Required="true" />
+                    <MudSelect T="string" Label="Category" @bind-Value="_newBudget.CategoryId" Required="true">
+                        @foreach (var category in _categories.Where(x => x.IsActive))
+                        {
+                            <MudSelectItem Value="@category.Id.ToString()">@category.Name</MudSelectItem>
+                        }
+                    </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="2">
                     <MudNumericField Label="Monthly limit" @bind-Value="_newBudget.MonthlyLimit" Required="true" Min="0.01m" />
@@ -38,6 +45,7 @@
                 <MudTable T="BudgetRow" Items="_rows" Hover="true" Dense="true">
                     <HeaderContent>
                         <MudTh>Category</MudTh>
+                        <MudTh>State</MudTh>
                         <MudTh>Limit</MudTh>
                         <MudTh>Spent this month</MudTh>
                         <MudTh>Remaining</MudTh>
@@ -45,6 +53,14 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Category">@context.Name</MudTd>
+                        <MudTd DataLabel="State">
+                            <MudChip T="string"
+                                     Color="@(context.CategoryIsActive ? Color.Success : Color.Warning)"
+                                     Variant="Variant.Outlined"
+                                     Size="Size.Small">
+                                @(context.CategoryIsActive ? "Active" : "Disabled")
+                            </MudChip>
+                        </MudTd>
                         <MudTd DataLabel="Limit">@context.Limit.ToString("N2") @context.Currency</MudTd>
                         <MudTd DataLabel="Spent this month">@context.Spent.ToString("N2") @context.Currency</MudTd>
                         <MudTd DataLabel="Remaining">
@@ -69,21 +85,38 @@
 
 @code {
     private readonly List<BudgetRow> _rows = new();
+    private readonly List<Treasury.App.Domain.Category> _categories = new();
     private Guid _householdId;
     private readonly NewBudgetForm _newBudget = new();
 
     protected override async Task OnInitializedAsync()
     {
-        _householdId = await DbContext.Households
-            .OrderBy(x => x.Id)
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync();
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            _householdId = Guid.Empty;
+            return;
+        }
+
+        _householdId = user.HouseholdId;
 
         await LoadAsync();
     }
 
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(authState.User);
+    }
+
     private async Task LoadAsync()
     {
+        _categories.Clear();
+        _categories.AddRange(await DbContext.Categories
+            .Where(x => x.HouseholdId == _householdId)
+            .OrderBy(x => x.Name)
+            .ToListAsync());
+
         var budgets = await DbContext.BudgetCategories
             .Where(x => x.HouseholdId == _householdId)
             .OrderBy(x => x.Name)
@@ -91,64 +124,117 @@
 
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var monthlyExpenses = await DbContext.Transactions
-            .Where(x => x.HouseholdId == _householdId && x.TransactionDate >= monthStart && x.Type == "expense")
+            .Where(x => x.HouseholdId == _householdId && x.TransactionDate >= monthStart && x.Type == TransactionType.Expense)
             .ToListAsync();
 
         _rows.Clear();
         foreach (var budget in budgets)
         {
+            var category = _categories.FirstOrDefault(x => x.Id == budget.CategoryId);
+            if (category is null)
+            {
+                continue;
+            }
+
             var spent = monthlyExpenses
-                .Where(x => x.Category.Equals(budget.Name, StringComparison.OrdinalIgnoreCase))
+                .Where(x => x.CategoryId == budget.CategoryId)
                 .Sum(x => x.Amount);
 
             _rows.Add(new BudgetRow(
                 budget.Id,
-                budget.Name,
+                category.Name,
+                category.IsActive,
                 budget.MonthlyLimit,
                 budget.Currency,
                 spent,
                 budget.MonthlyLimit - spent));
         }
+
+        if (string.IsNullOrWhiteSpace(_newBudget.CategoryId))
+        {
+            var activeCategory = _categories.FirstOrDefault(x => x.IsActive);
+            if (activeCategory is not null)
+            {
+                _newBudget.CategoryId = activeCategory.Id.ToString();
+            }
+        }
     }
 
     private async Task SaveBudgetAsync()
     {
-        if (string.IsNullOrWhiteSpace(_newBudget.Name) || _newBudget.MonthlyLimit <= 0m)
+        if (string.IsNullOrWhiteSpace(_newBudget.CategoryId) || _newBudget.MonthlyLimit <= 0m)
         {
             Snackbar.Add("Budget category and a positive monthly limit are required.", Severity.Warning);
             return;
         }
 
-        var budget = new Treasury.App.Domain.BudgetCategory
+        if (!Guid.TryParse(_newBudget.CategoryId, out var categoryId))
         {
-            HouseholdId = _householdId,
-            Name = _newBudget.Name.Trim(),
-            MonthlyLimit = _newBudget.MonthlyLimit,
-            Currency = string.IsNullOrWhiteSpace(_newBudget.Currency) ? "PLN" : _newBudget.Currency.Trim().ToUpperInvariant(),
-            Notes = _newBudget.Notes?.Trim() ?? string.Empty,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+            Snackbar.Add("Please select a valid category.", Severity.Warning);
+            return;
+        }
 
-        DbContext.BudgetCategories.Add(budget);
+        var category = await DbContext.Categories
+            .SingleOrDefaultAsync(x => x.Id == categoryId && x.HouseholdId == _householdId);
+        if (category is null)
+        {
+            Snackbar.Add("Selected category could not be found.", Severity.Error);
+            return;
+        }
+
+        if (!category.IsActive)
+        {
+            Snackbar.Add("Disabled category cannot be used for a new budget.", Severity.Warning);
+            return;
+        }
+
+        var existingBudget = await DbContext.BudgetCategories
+            .SingleOrDefaultAsync(x => x.HouseholdId == _householdId && x.CategoryId == category.Id);
+
+        if (existingBudget is null)
+        {
+            var budget = new Treasury.App.Domain.BudgetCategory
+            {
+                HouseholdId = _householdId,
+                CategoryId = category.Id,
+                Name = category.Name,
+                MonthlyLimit = _newBudget.MonthlyLimit,
+                Currency = string.IsNullOrWhiteSpace(_newBudget.Currency) ? "PLN" : _newBudget.Currency.Trim().ToUpperInvariant(),
+                Notes = _newBudget.Notes?.Trim() ?? string.Empty,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            DbContext.BudgetCategories.Add(budget);
+            Snackbar.Add("Budget saved.", Severity.Success);
+        }
+        else
+        {
+            existingBudget.Name = category.Name;
+            existingBudget.MonthlyLimit = _newBudget.MonthlyLimit;
+            existingBudget.Currency = string.IsNullOrWhiteSpace(_newBudget.Currency) ? "PLN" : _newBudget.Currency.Trim().ToUpperInvariant();
+            existingBudget.Notes = _newBudget.Notes?.Trim() ?? string.Empty;
+            existingBudget.UpdatedAt = DateTime.UtcNow;
+            Snackbar.Add("Budget updated.", Severity.Success);
+        }
+
         await DbContext.SaveChangesAsync();
 
-        _newBudget.Name = string.Empty;
+        _newBudget.CategoryId = _categories.FirstOrDefault(x => x.IsActive)?.Id.ToString() ?? string.Empty;
         _newBudget.MonthlyLimit = 0m;
         _newBudget.Currency = "PLN";
         _newBudget.Notes = string.Empty;
 
-        Snackbar.Add("Budget saved.", Severity.Success);
         await LoadAsync();
     }
 
     private sealed class NewBudgetForm
     {
-        public string Name { get; set; } = string.Empty;
+        public string CategoryId { get; set; } = string.Empty;
         public decimal MonthlyLimit { get; set; }
         public string Currency { get; set; } = "PLN";
         public string Notes { get; set; } = string.Empty;
     }
 
-    private sealed record BudgetRow(Guid Id, string Name, decimal Limit, string Currency, decimal Spent, decimal Remaining);
+    private sealed record BudgetRow(Guid Id, string Name, bool CategoryIsActive, decimal Limit, string Currency, decimal Spent, decimal Remaining);
 }

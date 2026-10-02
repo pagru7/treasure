@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
 namespace Treasury.IntegrationTests;
@@ -51,10 +52,10 @@ public class TransfersWorkflowTests
         var inflow = await db.Transactions.SingleAsync(x => x.Id == inflowTransactionId);
 
         outflow.AccountId.Should().Be(fromAccountId);
-        outflow.Type.Should().Be("transfer-out");
+        outflow.Type.Should().Be(TransactionType.TransferOut);
         outflow.BalanceAfterTransaction.Should().Be(-25.50m);
         inflow.AccountId.Should().Be(toAccountId);
-        inflow.Type.Should().Be("transfer-in");
+        inflow.Type.Should().Be(TransactionType.TransferIn);
         inflow.BalanceAfterTransaction.Should().Be(25.50m);
 
         var fromAccount = await db.Accounts.SingleAsync(x => x.Id == fromAccountId);
@@ -210,7 +211,8 @@ public class TransfersWorkflowTests
         {
             Email = email,
             Password = password,
-            ConfirmPassword = password
+            ConfirmPassword = password,
+            HouseholdNameOrId = $"household-{Guid.NewGuid():N}"
         });
         registerResponse.StatusCode.Should().Be(HttpStatusCode.Redirect);
 

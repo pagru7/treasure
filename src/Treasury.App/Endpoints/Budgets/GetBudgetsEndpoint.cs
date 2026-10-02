@@ -26,10 +26,26 @@ public sealed class GetBudgetsEndpoint(TreasuryDbContext db, UserManager<Applica
         var budgets = await db.BudgetCategories
             .Where(x => x.HouseholdId == user.HouseholdId)
             .OrderBy(x => x.Name)
+            .Join(
+                db.Categories,
+                budget => budget.CategoryId,
+                category => category.Id,
+                (budget, category) => new
+                {
+                    budget.Id,
+                    budget.CategoryId,
+                    CategoryName = category.Name,
+                    CategoryIsActive = category.IsActive,
+                    budget.MonthlyLimit,
+                    budget.Currency,
+                    budget.Notes
+                })
             .Select(x => new
             {
                 x.Id,
-                x.Name,
+                x.CategoryId,
+                Name = x.CategoryName,
+                x.CategoryIsActive,
                 x.MonthlyLimit,
                 x.Currency,
                 x.Notes

@@ -93,9 +93,11 @@ public partial class Accounts
                 CurrentBalance = account.CurrentBalance,
                 IsActive = account.IsActive,
                 BankAccountNumber = account.BankAccountNumber,
+                Description = account.Description,
                 IsOwner = account.OwnerUserId == _currentUser.Id,
                 EditingName = account.Name,
                 EditingBankAccountNumber = account.BankAccountNumber,
+                EditingDescription = account.Description,
                 SharedWith = viewersByAccountId.TryGetValue(account.Id, out var viewers) ? viewers : new List<AccountViewerChoice>(),
                 SharedWithLoadFailed = sharedViewerLoadFailed
             }));
@@ -219,6 +221,7 @@ public partial class Accounts
         account.IsEditing = true;
         account.EditingName = account.Name;
         account.EditingBankAccountNumber = account.BankAccountNumber ?? string.Empty;
+        account.EditingDescription = account.Description ?? string.Empty;
     }
 
     private void CancelEditAccount(AccountCardVm account)
@@ -226,6 +229,7 @@ public partial class Accounts
         account.IsEditing = false;
         account.EditingName = account.Name;
         account.EditingBankAccountNumber = account.BankAccountNumber ?? string.Empty;
+        account.EditingDescription = account.Description ?? string.Empty;
     }
 
     private async Task SaveAccountDetailsAsync(AccountCardVm account)
@@ -248,6 +252,12 @@ public partial class Accounts
             return;
         }
 
+        if (!string.IsNullOrEmpty(account.EditingDescription) && account.EditingDescription.Length > 1000)
+        {
+            Snackbar.Add("Description must be at most 1000 characters.", Severity.Warning);
+            return;
+        }
+
         var entity = await DbContext.Accounts.SingleOrDefaultAsync(x => x.Id == account.Id && x.HouseholdId == _currentUser.HouseholdId, CancellationToken.None);
         if (entity is null)
         {
@@ -263,6 +273,7 @@ public partial class Accounts
 
         entity.Name = account.EditingName.Trim();
         entity.BankAccountNumber = normalizedBankAccountNumber;
+        entity.Description = string.IsNullOrWhiteSpace(account.EditingDescription) ? null : account.EditingDescription.Trim();
         entity.UpdatedAt = DateTime.UtcNow;
         await DbContext.SaveChangesAsync();
 
@@ -290,6 +301,12 @@ public partial class Accounts
             return;
         }
 
+        if (!string.IsNullOrEmpty(_newAccount.Description) && _newAccount.Description.Length > 1000)
+        {
+            Snackbar.Add("Description must be at most 1000 characters.", Severity.Warning);
+            return;
+        }
+
         var account = new Treasury.App.Domain.Account
         {
             HouseholdId = _currentUser.HouseholdId,
@@ -298,6 +315,7 @@ public partial class Accounts
             Currency = string.IsNullOrWhiteSpace(_newAccount.Currency) ? "PLN" : _newAccount.Currency.Trim().ToUpperInvariant(),
             AccountType = string.IsNullOrWhiteSpace(_newAccount.AccountType) ? "cash-wallet" : _newAccount.AccountType.Trim(),
             BankAccountNumber = bankAccountNumber,
+            Description = string.IsNullOrWhiteSpace(_newAccount.Description) ? null : _newAccount.Description.Trim(),
             CurrentBalance = _newAccount.InitialBalance,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -345,6 +363,7 @@ public partial class Accounts
         _newAccount.AccountType = "cash-wallet";
         _newAccount.InitialBalance = 0m;
         _newAccount.BankAccountNumber = string.Empty;
+        _newAccount.Description = string.Empty;
     }
 
     private sealed class NewAccountForm
@@ -354,6 +373,7 @@ public partial class Accounts
         public string AccountType { get; set; } = "cash-wallet";
         public decimal InitialBalance { get; set; }
         public string? BankAccountNumber { get; set; }
+        public string Description { get; set; } = string.Empty;
     }
 
     private sealed class AccountCardVm
@@ -366,9 +386,11 @@ public partial class Accounts
         public bool IsActive { get; set; }
         public bool IsOwner { get; set; }
         public string? BankAccountNumber { get; set; }
+        public string? Description { get; set; }
         public bool IsEditing { get; set; }
         public string EditingName { get; set; } = string.Empty;
         public string? EditingBankAccountNumber { get; set; }
+        public string? EditingDescription { get; set; }
         public string SelectedShareEmail { get; set; } = string.Empty;
         public List<AccountViewerChoice> SharedWith { get; set; } = new();
         public bool SharedWithLoadFailed { get; set; }

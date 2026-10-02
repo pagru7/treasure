@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
-using Treasury.App.Application.Valuations;
 using Treasury.App.Infrastructure.Data;
 
 namespace Treasury.IntegrationTests;
@@ -32,13 +31,6 @@ public class Phase1AcceptanceTests
     }
 
     [Fact]
-    public void BullionFormula_Uses_Weight_Purity_UnitPrice()
-    {
-        var value = BullionFormulaCalculator.Calculate(100m, 0.9999m, 320m);
-        value.Should().Be(31996.8m);
-    }
-
-    [Fact]
     public async Task Phase1_Write_Endpoints_Are_Protected_For_Anonymous_User()
     {
         await using var app = new TreasuryHostFactory();
@@ -52,16 +44,17 @@ public class Phase1AcceptanceTests
             ToAccountId = Guid.NewGuid(),
             Amount = 1m
         });
-        var valuations = await client.PostAsJsonAsync("/api/valuations/coin", new
+        var preciousMetals = await client.PostAsJsonAsync("/api/precious-metals", new
         {
-            AssetName = "x",
-            Quantity = 1m,
-            CurrentUnitValue = 1m
+            Name = "x",
+            PurchasePrice = 1m,
+            PurchaseDate = DateTime.UtcNow,
+            CurrentValue = 1m
         });
 
         accounts.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         accountTypes.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         transfers.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        valuations.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        preciousMetals.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

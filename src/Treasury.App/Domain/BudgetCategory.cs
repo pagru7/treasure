@@ -4,6 +4,7 @@ public class BudgetCategory
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid HouseholdId { get; set; }
+    public Guid CategoryId { get; set; }
     public string Name { get; set; } = string.Empty;
     public decimal MonthlyLimit { get; set; }
     public string Currency { get; set; } = "PLN";

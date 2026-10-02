@@ -1,48 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Treasury.App.Application.Transactions;
+using Treasury.App.Common;
 using Treasury.App.Contracts.Transactions;
 using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
 namespace Treasury.App.Application.Transfers;
-
-public enum TransferCreationStatus
-{
-    Success,
-    InvalidRequest,
-    NotFound,
-    Forbidden
-}
-
-public sealed record TransferCreationIssue(string Field, string Message);
-
-public sealed record TransferCreationOutcome(
-    Guid TransferId,
-    Guid OutflowTransactionId,
-    Guid InflowTransactionId,
-    Guid FromAccountId,
-    Guid ToAccountId,
-    decimal Amount,
-    string Currency,
-    DateTime TransferDate);
-
-public sealed record TransferCreationResult(
-    TransferCreationStatus Status,
-    string? Message,
-    IReadOnlyList<TransferCreationIssue> Issues,
-    TransferCreationOutcome? Outcome)
-{
-    public bool Succeeded => Status == TransferCreationStatus.Success && Outcome is not null;
-
-    public static TransferCreationResult Success(TransferCreationOutcome outcome) =>
-        new(TransferCreationStatus.Success, null, [], outcome);
-
-    public static TransferCreationResult Failure(
-        TransferCreationStatus status,
-        string message,
-        params TransferCreationIssue[] issues) =>
-        new(status, message, issues, null);
-}
 
 public class TransferCreationService(
     TreasuryDbContext db,
@@ -62,45 +25,13 @@ public class TransferCreationService(
                 issues.ToArray());
         }
 
-        var fromAccount = await db.Accounts.SingleOrDefaultAsync(
-            x => x.Id == request.FromAccountId && x.HouseholdId == user.HouseholdId,
-            ct);
-        var toAccount = await db.Accounts.SingleOrDefaultAsync(
-            x => x.Id == request.ToAccountId && x.HouseholdId == user.HouseholdId,
-            ct);
-
-        if (fromAccount is null || toAccount is null)
+        Account? fromAccount, toAccount;
+        var result = await GetAccounts(user, request, ct);
+        if (!result.IsSuccess)
         {
-            return TransferCreationResult.Failure(
-                TransferCreationStatus.NotFound,
-                "Transfer accounts were not found.");
+            return result.Error!;
         }
-
-        if (fromAccount.OwnerUserId != user.Id || toAccount.OwnerUserId != user.Id)
-        {
-            return TransferCreationResult.Failure(
-                TransferCreationStatus.Forbidden,
-                "Transfers can only be created for your own accounts.");
-        }
-
-        if (!fromAccount.IsActive || !toAccount.IsActive)
-        {
-            var accountIssues = new List<TransferCreationIssue>();
-            if (!fromAccount.IsActive)
-            {
-                accountIssues.Add(new TransferCreationIssue("FromAccountId", "Source account is inactive."));
-            }
-
-            if (!toAccount.IsActive)
-            {
-                accountIssues.Add(new TransferCreationIssue("ToAccountId", "Destination account is inactive."));
-            }
-
-            return TransferCreationResult.Failure(
-                TransferCreationStatus.InvalidRequest,
-                "Transfers are allowed only between active accounts.",
-                accountIssues.ToArray());
-        }
+        (fromAccount, toAccount) = result.Value!;
 
         var transferDate = request.TransferDate == default ? DateTime.UtcNow : request.TransferDate;
         var currency = string.IsNullOrWhiteSpace(request.Currency)
@@ -123,15 +54,18 @@ public class TransferCreationService(
             CreatedAt = utcNow
         };
 
+        var transferCategory = await ResolveSystemCategoryAsync(user.HouseholdId, "Transfer", ct);
+
         var outflow = new Transaction
         {
             HouseholdId = user.HouseholdId,
             AccountId = fromAccount.Id,
+            CategoryId = transferCategory.Id,
             Description = $"{description} -> {toAccount.Name}",
-            Category = "Transfer",
+            Category = transferCategory.Name,
             Amount = request.Amount,
             Currency = currency,
-            Type = "transfer-out",
+            Type = TransactionType.TransferOut,
             TransactionDate = transferDate,
             CreatedAt = utcNow,
             UpdatedAt = utcNow
@@ -141,11 +75,12 @@ public class TransferCreationService(
         {
             HouseholdId = user.HouseholdId,
             AccountId = toAccount.Id,
+            CategoryId = transferCategory.Id,
             Description = $"{description} <- {fromAccount.Name}",
-            Category = "Transfer",
+            Category = transferCategory.Name,
             Amount = request.Amount,
             Currency = currency,
-            Type = "transfer-in",
+            Type = TransactionType.TransferIn,
             TransactionDate = transferDate,
             CreatedAt = utcNow,
             UpdatedAt = utcNow
@@ -193,6 +128,57 @@ public class TransferCreationService(
             transfer.TransferDate));
     }
 
+    private async Task<Result<(Account, Account), TransferCreationResult>> GetAccounts(
+        ApplicationUser user,
+        CreateTransferRequest request,
+        //out Account? fromAccount,
+        //out Account? toAccount,
+        CancellationToken ct)
+    {
+        var fromAccount = await db.Accounts
+                    .SingleOrDefaultAsync(x => x.Id == request.FromAccountId
+                        && x.HouseholdId == user.HouseholdId,
+                        ct);
+        var toAccount = await db.Accounts
+                    .SingleOrDefaultAsync(x => x.Id == request.ToAccountId
+                        && x.HouseholdId == user.HouseholdId,
+                        ct);
+        if (fromAccount is null || toAccount is null)
+        {
+            return Result<(Account, Account), TransferCreationResult>.Failure(TransferCreationResult.Failure(
+                TransferCreationStatus.NotFound,
+                "Transfer accounts were not found."));
+        }
+
+        if (fromAccount.OwnerUserId != user.Id || toAccount.OwnerUserId != user.Id)
+        {
+            return Result<(Account, Account), TransferCreationResult>.Failure(TransferCreationResult.Failure(
+                TransferCreationStatus.Forbidden,
+                "Transfers can only be created for your own accounts."));
+        }
+
+        if (!fromAccount.IsActive || !toAccount.IsActive)
+        {
+            var accountIssues = new List<TransferCreationIssue>();
+            if (!fromAccount.IsActive)
+            {
+                accountIssues.Add(new TransferCreationIssue("FromAccountId", "Source account is inactive."));
+            }
+
+            if (!toAccount.IsActive)
+            {
+                accountIssues.Add(new TransferCreationIssue("ToAccountId", "Destination account is inactive."));
+            }
+
+            return Result<(Account, Account), TransferCreationResult>.Failure(TransferCreationResult.Failure(
+                TransferCreationStatus.InvalidRequest,
+                "Transfers are allowed only between active accounts.",
+                accountIssues.ToArray()));
+        }
+
+        return Result<(Account, Account), TransferCreationResult>.Success((fromAccount, toAccount));
+    }
+
     private static List<TransferCreationIssue> ValidateRequest(CreateTransferRequest request)
     {
         var issues = new List<TransferCreationIssue>();
@@ -213,5 +199,35 @@ public class TransferCreationService(
         }
 
         return issues;
+    }
+
+    private async Task<Category> ResolveSystemCategoryAsync(Guid householdId, string name, CancellationToken ct)
+    {
+        var existing = await db.Categories
+            .SingleOrDefaultAsync(x => x.HouseholdId == householdId && x.Name.ToLower() == name.ToLower(), ct);
+        if (existing is not null)
+        {
+            if (!existing.IsActive)
+            {
+                existing.IsActive = true;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(ct);
+            }
+
+            return existing;
+        }
+
+        var created = new Category
+        {
+            HouseholdId = householdId,
+            Name = name,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.Categories.Add(created);
+        await db.SaveChangesAsync(ct);
+        return created;
     }
 }

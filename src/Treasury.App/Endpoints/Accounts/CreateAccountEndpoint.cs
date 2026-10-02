@@ -49,6 +49,13 @@ public sealed class CreateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
             return;
         }
 
+        if (!string.IsNullOrEmpty(request.Description) && request.Description.Length > 1000)
+        {
+            AddError(x => x.Description, "Description must be at most 1000 characters.");
+            await SendErrorsAsync(cancellation: ct);
+            return;
+        }
+
         var account = new Account
         {
             HouseholdId = user.HouseholdId,
@@ -57,6 +64,7 @@ public sealed class CreateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "PLN" : request.Currency.Trim().ToUpperInvariant(),
             AccountType = accountType,
             BankAccountNumber = bankAccountNumber,
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             CurrentBalance = 0m
         };
 
@@ -71,6 +79,7 @@ public sealed class CreateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
             AccountType = account.AccountType,
             IsActive = account.IsActive,
             BankAccountNumber = account.BankAccountNumber,
+            Description = account.Description,
             CurrentBalance = account.CurrentBalance,
             IsReadOnly = false
         };
