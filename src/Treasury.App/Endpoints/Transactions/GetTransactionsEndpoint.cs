@@ -65,7 +65,7 @@ public sealed class GetTransactionsEndpoint(TreasuryDbContext db, UserManager<Ap
             x.Category,
             x.Amount,
             x.Currency,
-            Type = TransactionBalanceMath.ToApiType(x.Type),
+            x.Type,
             x.TransactionDate,
             x.BalanceAfterTransaction,
             x.Tags
