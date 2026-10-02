@@ -150,7 +150,7 @@ public sealed class CreateTransactionEndpoint(
             transaction.Category,
             transaction.Amount,
             transaction.Currency,
-            Type = TransactionBalanceMath.ToApiType(transaction.Type),
+            transaction.Type,
             transaction.TransactionDate,
             transaction.BalanceAfterTransaction,
             Tags = validTagIds
