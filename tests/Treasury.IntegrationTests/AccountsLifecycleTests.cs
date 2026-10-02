@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
 namespace Treasury.IntegrationTests;
@@ -188,7 +189,7 @@ public class AccountsLifecycleTests
         var db = scope.ServiceProvider.GetRequiredService<TreasuryDbContext>();
 
         var account = await db.Accounts.SingleAsync(x => x.Id == accountId);
-        var correctionTransaction = await db.Transactions.SingleAsync(x => x.AccountId == accountId && x.Type == "balance-correction");
+        var correctionTransaction = await db.Transactions.SingleAsync(x => x.AccountId == accountId && x.Type == TransactionType.BalanceCorrection);
 
         account.CurrentBalance.Should().Be(25m);
         correctionTransaction.BalanceAfterTransaction.Should().Be(25m);
@@ -227,6 +228,56 @@ public class AccountsLifecycleTests
         html.Should().NotContain("Unknown account");
     }
 
+    [Fact]
+    public async Task Create_Account_Persists_Description()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var ensureTypeResponse = await client.PostAsJsonAsync("/api/account-types", new
+        {
+            Name = "cash-wallet",
+            Description = "Cash wallet"
+        });
+        ensureTypeResponse.StatusCode.Should().BeOneOf(HttpStatusCode.Created, HttpStatusCode.BadRequest);
+
+        var response = await client.PostAsJsonAsync("/api/accounts", new
+        {
+            Name = "Emergency fund",
+            Currency = "PLN",
+            AccountType = "cash-wallet",
+            Description = "This account is reserved for emergencies."
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var accounts = await GetAccountsAsync(client, "?includeInactive=true");
+        var account = accounts.RootElement.EnumerateArray().Single(x => x.GetProperty("name").GetString() == "Emergency fund");
+        account.GetProperty("description").GetString().Should().Be("This account is reserved for emergencies.");
+    }
+
+    [Fact]
+    public async Task Update_Account_Description_Persists_Value()
+    {
+        await using var app = new TreasuryHostFactory();
+        var client = CreateAuthenticatedClient(app);
+        await RegisterAndSignInAsync(client);
+
+        var accountId = await CreateAccountAsync(client, "Daily account");
+
+        var response = await client.PutAsJsonAsync($"/api/accounts/{accountId}", new
+        {
+            Name = "Daily account",
+            Description = "Main spending account.",
+            BankAccountNumber = (string?)null
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var accounts = await GetAccountsAsync(client, "?includeInactive=true");
+        var account = accounts.RootElement.EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == accountId);
+        account.GetProperty("description").GetString().Should().Be("Main spending account.");
+    }
+
     private static HttpClient CreateAuthenticatedClient(TreasuryHostFactory app) =>
         app.CreateClient(new WebApplicationFactoryClientOptions
         {
@@ -243,7 +294,8 @@ public class AccountsLifecycleTests
         {
             Email = email,
             Password = password,
-            ConfirmPassword = password
+            ConfirmPassword = password,
+            HouseholdNameOrId = $"household-{Guid.NewGuid():N}"
         });
         registerResponse.StatusCode.Should().Be(HttpStatusCode.Redirect);
 
@@ -257,6 +309,13 @@ public class AccountsLifecycleTests
 
     private static async Task<Guid> CreateAccountAsync(HttpClient client, string name, string? bankAccountNumber = null)
     {
+        var ensureTypeResponse = await client.PostAsJsonAsync("/api/account-types", new
+        {
+            Name = "cash-wallet",
+            Description = "Cash wallet"
+        });
+        ensureTypeResponse.StatusCode.Should().BeOneOf(HttpStatusCode.Created, HttpStatusCode.BadRequest);
+
         var response = await client.PostAsJsonAsync("/api/accounts", new
         {
             Name = name,

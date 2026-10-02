@@ -10,6 +10,7 @@ public class Account
     public string AccountType { get; set; } = "cash-wallet";
     public bool IsActive { get; set; } = true;
     public string? BankAccountNumber { get; set; }
+    public string? Description { get; set; }
     public decimal CurrentBalance { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

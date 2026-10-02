@@ -1,0 +1,204 @@
+@page "/feedback"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Feedback</MudText>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudText Typo="Typo.h6">Leave feedback</MudText>
+            <MudGrid Class="mt-2">
+                <MudItem xs="12" md="4">
+                    <MudTextField Label="Title" @bind-Value="_newFeedback.Title" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <MudTextField Label="Description"
+                                  @bind-Value="_newFeedback.Description"
+                                  Required="true"
+                                  Lines="4"
+                                  Counter="1000"
+                                  MaxLength="1000" />
+                </MudItem>
+            </MudGrid>
+            <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="CreateAsync">Save feedback</MudButton>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            @if (_feedbackItems.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">No feedback entries yet.</MudAlert>
+            }
+            else
+            {
+                <MudTable T="FeedbackItemVm" Items="_feedbackItems" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Created</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Title</MudTh>
+                        <MudTh>Description</MudTh>
+                        <MudTh>Action</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudSelect T="FeedbackStatus" @bind-Value="context.EditingStatus">
+                                <MudSelectItem Value="@FeedbackStatus.New">New</MudSelectItem>
+                                <MudSelectItem Value="@FeedbackStatus.Implementing">Implementing</MudSelectItem>
+                                <MudSelectItem Value="@FeedbackStatus.Done">Done</MudSelectItem>
+                            </MudSelect>
+                        </MudTd>
+                        <MudTd DataLabel="Title">@context.Title</MudTd>
+                        <MudTd DataLabel="Description">
+                            <MudTextField @bind-Value="context.EditingDescription" Lines="3" Counter="1000" MaxLength="1000" />
+                        </MudTd>
+                        <MudTd DataLabel="Action">
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => SaveAsync(context))">Update</MudButton>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<FeedbackItemVm> _feedbackItems = new();
+    private readonly NewFeedbackForm _newFeedback = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(auth.User);
+    }
+
+    private async Task LoadAsync()
+    {
+        _feedbackItems.Clear();
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            return;
+        }
+
+        var items = await DbContext.FeedbackItems
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync();
+
+        _feedbackItems.AddRange(items.Select(x => new FeedbackItemVm
+        {
+            Id = x.Id,
+            Title = x.Title,
+            Description = x.Description,
+            EditingDescription = x.Description,
+            Status = x.Status,
+            EditingStatus = x.Status,
+            CreatedAt = x.CreatedAt
+        }));
+    }
+
+    private async Task CreateAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in.", Severity.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newFeedback.Title) || string.IsNullOrWhiteSpace(_newFeedback.Description))
+        {
+            Snackbar.Add("Title and description are required.", Severity.Warning);
+            return;
+        }
+
+        if (_newFeedback.Description.Length > 1000)
+        {
+            Snackbar.Add("Description must be at most 1000 characters.", Severity.Warning);
+            return;
+        }
+
+        var utcNow = DateTime.UtcNow;
+        DbContext.FeedbackItems.Add(new FeedbackItem
+        {
+            HouseholdId = user.HouseholdId,
+            Title = _newFeedback.Title.Trim(),
+            Description = _newFeedback.Description.Trim(),
+            Status = FeedbackStatus.New,
+            CreatedAt = utcNow,
+            UpdatedAt = utcNow
+        });
+
+        await DbContext.SaveChangesAsync();
+        _newFeedback.Title = string.Empty;
+        _newFeedback.Description = string.Empty;
+        Snackbar.Add("Feedback saved.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task SaveAsync(FeedbackItemVm item)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in.", Severity.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(item.EditingDescription))
+        {
+            Snackbar.Add("Description is required.", Severity.Warning);
+            return;
+        }
+
+        if (item.EditingDescription.Length > 1000)
+        {
+            Snackbar.Add("Description must be at most 1000 characters.", Severity.Warning);
+            return;
+        }
+
+        var entity = await DbContext.FeedbackItems
+            .SingleOrDefaultAsync(x => x.Id == item.Id && x.HouseholdId == user.HouseholdId);
+        if (entity is null)
+        {
+            Snackbar.Add("Feedback not found.", Severity.Error);
+            return;
+        }
+
+        entity.Status = item.EditingStatus;
+        entity.Description = item.EditingDescription.Trim();
+        entity.UpdatedAt = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+
+        Snackbar.Add("Feedback updated.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private sealed class NewFeedbackForm
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+
+    private sealed class FeedbackItemVm
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public FeedbackStatus Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public FeedbackStatus EditingStatus { get; set; }
+        public string EditingDescription { get; set; } = string.Empty;
+    }
+}

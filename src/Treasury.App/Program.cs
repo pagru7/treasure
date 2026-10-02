@@ -1,4 +1,6 @@
 using FastEndpoints;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 using Treasury.App.Application.Accounts;
@@ -6,6 +8,7 @@ using Treasury.App.Application.Transactions;
 using Treasury.App.Application.Transfers;
 using Treasury.App.Common;
 using Treasury.App.Components;
+using Treasury.App.Domain;
 using Treasury.App.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -54,15 +57,27 @@ app.UseAuthorization();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value ?? string.Empty;
+    var appAuthResult = await context.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+    var isAppAuthenticated = appAuthResult.Succeeded
+        && appAuthResult.Principal?.Identity?.IsAuthenticated == true;
 
-    if (path == "/" && context.User.Identity?.IsAuthenticated != true)
+    if (path == "/" && !isAppAuthenticated)
     {
         context.Response.Redirect("/auth/login");
         return;
     }
 
-    if ((path == "/auth/login" || path == "/auth/register") && context.User.Identity?.IsAuthenticated == true)
+    if ((path == "/auth/login" || path == "/auth/register") && isAppAuthenticated)
     {
+        var userManager = context.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+        var existingUser = await userManager.GetUserAsync(appAuthResult.Principal!);
+        if (existingUser is null)
+        {
+            await context.SignOutAsync(IdentityConstants.ApplicationScheme);
+            await next();
+            return;
+        }
+
         context.Response.Redirect("/");
         return;
     }

@@ -1,0 +1,213 @@
+@page "/precious-metals/{Id:guid}"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h4">Precious metal details</MudText>
+            <MudButton Variant="Variant.Outlined" Href="/precious-metals">Back to list</MudButton>
+        </MudStack>
+
+        @if (_asset is null)
+        {
+            <MudAlert Severity="Severity.Warning">Item not found.</MudAlert>
+        }
+        else
+        {
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudText Typo="Typo.subtitle2">Name</MudText>
+                        <MudText Typo="Typo.body1">@_asset.Name</MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudText Typo="Typo.subtitle2">Purchase price</MudText>
+                        <MudText Typo="Typo.body1">@_asset.PurchasePrice.ToString("N2") PLN</MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudText Typo="Typo.subtitle2">Purchase date</MudText>
+                        <MudText Typo="Typo.body1">@_asset.PurchaseDate.ToLocalTime().ToString("yyyy-MM-dd")</MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudText Typo="Typo.subtitle2">Current value</MudText>
+                        <MudText Typo="Typo.body1">@_asset.CurrentValue.ToString("N2") PLN</MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudText Typo="Typo.subtitle2">Current profit</MudText>
+                        <MudText Typo="Typo.body1">@(_asset.CurrentValue - _asset.PurchasePrice).ToString("N2") PLN</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudText Typo="Typo.h6">Update current value</MudText>
+                <MudGrid Class="mt-2">
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal" Label="Current value" @bind-Value="_update.CurrentValue" Min="0.01m" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudDatePicker Label="Value date" @bind-Date="_update.ValueDate" MaxDate="DateTime.Today" />
+                    </MudItem>
+                    <MudItem xs="12" md="4" Class="d-flex align-end">
+                        <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="UpdateValueAsync">Save value</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudText Typo="Typo.h6">Price history</MudText>
+                <MudTable T="PreciousMetalValueEntry" Items="_history" Hover="true" Dense="true" Class="mt-2">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Value</MudTh>
+                        <MudTh>Profit at date</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Date">@context.ValueDate.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+                        <MudTd DataLabel="Value">@context.Value.ToString("N2") PLN</MudTd>
+                        <MudTd DataLabel="Profit at date">@GetProfitAtDate(context).ToString("N2") PLN</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private PreciousMetalAsset? _asset;
+    private readonly List<PreciousMetalValueEntry> _history = new();
+    private readonly ValueUpdateForm _update = new()
+    {
+        ValueDate = DateTime.UtcNow
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(auth.User);
+    }
+
+    private async Task LoadAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        _asset = null;
+        _history.Clear();
+
+        if (user is null)
+        {
+            return;
+        }
+
+        var asset = await DbContext.PreciousMetalAssets
+            .SingleOrDefaultAsync(x => x.Id == Id && x.HouseholdId == user.HouseholdId);
+        if (asset is null)
+        {
+            return;
+        }
+
+        _asset = asset;
+        _update.CurrentValue = asset.CurrentValue;
+        _update.ValueDate = DateTime.UtcNow;
+
+        var history = await DbContext.PreciousMetalValueEntries
+            .Where(x => x.PreciousMetalAssetId == asset.Id)
+            .OrderByDescending(x => x.ValueDate)
+            .ThenByDescending(x => x.CreatedAt)
+            .ToListAsync();
+
+        _history.AddRange(history);
+    }
+
+    private async Task UpdateValueAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in.", Severity.Error);
+            return;
+        }
+
+        if (_asset is null)
+        {
+            Snackbar.Add("Item not found.", Severity.Error);
+            NavigationManager.NavigateTo("/precious-metals");
+            return;
+        }
+
+        if (_update.CurrentValue <= 0m)
+        {
+            Snackbar.Add("Current value must be greater than zero.", Severity.Warning);
+            return;
+        }
+
+        var asset = await DbContext.PreciousMetalAssets
+            .SingleOrDefaultAsync(x => x.Id == _asset.Id && x.HouseholdId == user.HouseholdId);
+        if (asset is null)
+        {
+            Snackbar.Add("Item not found.", Severity.Error);
+            NavigationManager.NavigateTo("/precious-metals");
+            return;
+        }
+
+        var valueDate = _update.ValueDate ?? DateTime.UtcNow;
+        var valueDateUtc = valueDate.Kind == DateTimeKind.Utc ? valueDate : valueDate.ToUniversalTime();
+        if (valueDateUtc.Date > DateTime.UtcNow.Date)
+        {
+            Snackbar.Add("Future value date is not allowed.", Severity.Warning);
+            return;
+        }
+
+        asset.CurrentValue = _update.CurrentValue;
+        asset.CurrentValueDate = valueDateUtc;
+        asset.UpdatedAt = DateTime.UtcNow;
+
+        var dayStart = valueDateUtc.Date;
+        var dayEnd = dayStart.AddDays(1);
+        var existingDailyEntry = await DbContext.PreciousMetalValueEntries
+            .SingleOrDefaultAsync(
+                x => x.PreciousMetalAssetId == asset.Id
+                    && x.ValueDate >= dayStart
+                    && x.ValueDate < dayEnd);
+
+        if (existingDailyEntry is null)
+        {
+            DbContext.PreciousMetalValueEntries.Add(new PreciousMetalValueEntry
+            {
+                PreciousMetalAssetId = asset.Id,
+                Value = _update.CurrentValue,
+                ValueDate = valueDateUtc,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            existingDailyEntry.Value = _update.CurrentValue;
+            existingDailyEntry.ValueDate = valueDateUtc;
+        }
+
+        await DbContext.SaveChangesAsync();
+        Snackbar.Add("Current value updated.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private decimal GetProfitAtDate(PreciousMetalValueEntry entry) =>
+        _asset is null ? 0m : entry.Value - _asset.PurchasePrice;
+
+    private sealed class ValueUpdateForm
+    {
+        public decimal CurrentValue { get; set; }
+        public DateTime? ValueDate { get; set; }
+    }
+}

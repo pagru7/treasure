@@ -50,6 +50,13 @@
                     <MudItem xs="12" md="2">
                         <MudNumericField Label="Initial balance" @bind-Value="_newAccount.InitialBalance" Min="0m" />
                     </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField Label="Description (optional)"
+                                      @bind-Value="_newAccount.Description"
+                                      Lines="3"
+                                      Counter="1000"
+                                      MaxLength="1000" />
+                    </MudItem>
                 </MudGrid>
 
                 <MudStack Row="true" Class="mt-4" Justify="Justify.FlexEnd">
@@ -75,6 +82,10 @@
                             @if (!string.IsNullOrWhiteSpace(account.BankAccountNumber))
                             {
                                 <MudText Typo="Typo.body2" Color="Color.Secondary">Bank account: @account.BankAccountNumber</MudText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(account.Description))
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">@account.Description</MudText>
                             }
                             @if (!account.IsActive)
                             {
@@ -106,6 +117,13 @@
                                             </MudItem>
                                             <MudItem xs="12" md="6">
                                                 <MudTextField Label="Bank account number (optional)" @bind-Value="account.EditingBankAccountNumber" />
+                                            </MudItem>
+                                            <MudItem xs="12">
+                                                <MudTextField Label="Description (optional)"
+                                                              @bind-Value="account.EditingDescription"
+                                                              Lines="3"
+                                                              Counter="1000"
+                                                              MaxLength="1000" />
                                             </MudItem>
                                         </MudGrid>
                                         <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-3" Spacing="2">

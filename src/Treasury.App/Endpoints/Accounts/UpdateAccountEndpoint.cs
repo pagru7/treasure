@@ -12,6 +12,7 @@ public sealed class UpdateAccountRouteRequest
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? BankAccountNumber { get; set; }
+    public string? Description { get; set; }
 }
 
 public sealed class UpdateAccountEndpoint(TreasuryDbContext db, UserManager<ApplicationUser> userManager)
@@ -58,6 +59,12 @@ public sealed class UpdateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
             hasErrors = true;
         }
 
+        if (!string.IsNullOrEmpty(request.Description) && request.Description.Length > 1000)
+        {
+            AddError(x => x.Description, "Description must be at most 1000 characters.");
+            hasErrors = true;
+        }
+
         if (hasErrors)
         {
             await SendErrorsAsync(cancellation: ct);
@@ -66,6 +73,7 @@ public sealed class UpdateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
 
         account.Name = request.Name.Trim();
         account.BankAccountNumber = bankAccountNumber;
+        account.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
         account.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
@@ -74,7 +82,8 @@ public sealed class UpdateAccountEndpoint(TreasuryDbContext db, UserManager<Appl
         {
             account.Id,
             account.Name,
-            account.BankAccountNumber
+            account.BankAccountNumber,
+            account.Description
         }, ct);
     }
 }

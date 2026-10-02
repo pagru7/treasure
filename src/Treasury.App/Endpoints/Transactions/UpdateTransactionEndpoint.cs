@@ -62,6 +62,7 @@ public sealed class UpdateTransactionEndpoint(
         {
             outcome.Id,
             outcome.AccountId,
+            outcome.CategoryId,
             outcome.Description,
             outcome.Category,
             outcome.Amount,

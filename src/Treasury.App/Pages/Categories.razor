@@ -1,0 +1,240 @@
+@page "/categories"
+@attribute [Authorize]
+@inject TreasuryDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="pa-4 pa-sm-6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Categories</MudText>
+
+        <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" md="8">
+                    <MudTextField Label="Category name" @bind-Value="_newCategoryName" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="4" Class="d-flex align-center justify-center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Tertiary" OnClick="CreateCategoryAsync">Add</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @if (_categories.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No categories yet.</MudAlert>
+        }
+        else
+        {
+            <MudPaper Class="pa-4 rounded-xl" Elevation="2">
+                <MudTable T="Treasury.App.Domain.Category" Items="_categories" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">
+                            @if (_editingCategoryId == context.Id)
+                            {
+                                <MudTextField @bind-Value="_editingCategoryName" />
+                            }
+                            else
+                            {
+                                @context.Name
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string"
+                                     Color="@(context.IsActive ? Color.Success : Color.Warning)"
+                                     Variant="Variant.Outlined"
+                                     Size="Size.Small">
+                                @(context.IsActive ? "Active" : "Disabled")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="1">
+                                @if (_editingCategoryId == context.Id)
+                                {
+                                    <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Tertiary" OnClick="@(() => SaveRenameAsync(context))">Save</MudButton>
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelRename">Cancel</MudButton>
+                                }
+                                else
+                                {
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => BeginRename(context))">Rename</MudButton>
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => ToggleActiveStateAsync(context))">
+                                        @(context.IsActive ? "Disable" : "Enable")
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteCategoryAsync(context))">Delete</MudButton>
+                                }
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private readonly List<Treasury.App.Domain.Category> _categories = new();
+    private string _newCategoryName = string.Empty;
+    private Guid? _editingCategoryId;
+    private string _editingCategoryName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return await UserManager.GetUserAsync(authState.User);
+    }
+
+    private async Task LoadAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            _categories.Clear();
+            return;
+        }
+
+        _categories.Clear();
+        _categories.AddRange(await DbContext.Categories
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .OrderBy(x => x.Name)
+            .ToListAsync());
+    }
+
+    private async Task CreateCategoryAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in to manage categories.", Severity.Error);
+            return;
+        }
+
+        var name = _newCategoryName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Snackbar.Add("Category name is required.", Severity.Warning);
+            return;
+        }
+
+        var exists = await DbContext.Categories
+            .AnyAsync(x => x.HouseholdId == user.HouseholdId && x.Name.ToLower() == name.ToLower());
+        if (exists)
+        {
+            Snackbar.Add("This category already exists.", Severity.Warning);
+            return;
+        }
+
+        DbContext.Categories.Add(new Treasury.App.Domain.Category
+        {
+            HouseholdId = user.HouseholdId,
+            Name = name,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await DbContext.SaveChangesAsync();
+
+        _newCategoryName = string.Empty;
+        Snackbar.Add("Category saved.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private void BeginRename(Treasury.App.Domain.Category category)
+    {
+        _editingCategoryId = category.Id;
+        _editingCategoryName = category.Name;
+    }
+
+    private void CancelRename()
+    {
+        _editingCategoryId = null;
+        _editingCategoryName = string.Empty;
+    }
+
+    private async Task SaveRenameAsync(Treasury.App.Domain.Category category)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user is null)
+        {
+            Snackbar.Add("You must be signed in to manage categories.", Severity.Error);
+            return;
+        }
+
+        var name = _editingCategoryName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Snackbar.Add("Category name is required.", Severity.Warning);
+            return;
+        }
+
+        var exists = await DbContext.Categories.AnyAsync(x =>
+            x.HouseholdId == user.HouseholdId
+            && x.Id != category.Id
+            && x.Name.ToLower() == name.ToLower());
+        if (exists)
+        {
+            Snackbar.Add("This category already exists.", Severity.Warning);
+            return;
+        }
+
+        category.Name = name;
+        category.UpdatedAt = DateTime.UtcNow;
+
+        var affectedBudgets = await DbContext.BudgetCategories
+            .Where(x => x.HouseholdId == user.HouseholdId && x.CategoryId == category.Id)
+            .ToListAsync();
+        foreach (var budget in affectedBudgets)
+        {
+            budget.Name = name;
+            budget.UpdatedAt = DateTime.UtcNow;
+        }
+
+        var affectedTransactions = await DbContext.Transactions
+            .Where(x => x.HouseholdId == user.HouseholdId && x.CategoryId == category.Id)
+            .ToListAsync();
+        foreach (var transaction in affectedTransactions)
+        {
+            transaction.Category = name;
+            transaction.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await DbContext.SaveChangesAsync();
+        CancelRename();
+        Snackbar.Add("Category renamed.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task ToggleActiveStateAsync(Treasury.App.Domain.Category category)
+    {
+        category.IsActive = !category.IsActive;
+        category.UpdatedAt = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+        Snackbar.Add(category.IsActive ? "Category enabled." : "Category disabled.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task DeleteCategoryAsync(Treasury.App.Domain.Category category)
+    {
+        var hasTransactions = await DbContext.Transactions.AnyAsync(x => x.CategoryId == category.Id);
+        var hasBudgets = await DbContext.BudgetCategories.AnyAsync(x => x.CategoryId == category.Id);
+        if (hasTransactions || hasBudgets)
+        {
+            Snackbar.Add("Cannot delete category with transactions or budgets.", Severity.Warning);
+            return;
+        }
+
+        DbContext.Categories.Remove(category);
+        await DbContext.SaveChangesAsync();
+        Snackbar.Add("Category deleted.", Severity.Success);
+        await LoadAsync();
+    }
+}

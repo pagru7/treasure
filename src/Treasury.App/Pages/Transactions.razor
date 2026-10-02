@@ -34,15 +34,15 @@
                     <MudTextField Label="Description" @bind-Value="_newTransaction.Description" Required="true" />
                 </MudItem>
                 <MudItem xs="12" md="2">
-                    <MudTextField Label="Category" @bind-Value="_newTransaction.Category" />
+                    <MudTextField Label="Category" @bind-Value="_newTransaction.Category" Required="true" />
                 </MudItem>
                 <MudItem xs="12" md="2">
                     <MudNumericField Label="Amount" @bind-Value="_newTransaction.Amount" Required="true" Min="0.01m" />
                 </MudItem>
                 <MudItem xs="12" md="2">
-                    <MudSelect T="string" Label="Type" @bind-Value="_newTransaction.Type">
-                        <MudSelectItem Value="@("income")">Income</MudSelectItem>
-                        <MudSelectItem Value="@("expense")">Expense</MudSelectItem>
+                    <MudSelect T="TransactionType" Label="Type" @bind-Value="_newTransaction.Type">
+                        <MudSelectItem Value="@TransactionType.Income">Income</MudSelectItem>
+                        <MudSelectItem Value="@TransactionType.Expense">Expense</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="2">
@@ -93,7 +93,12 @@
                             <MudTextField Label="Description" @bind-Value="_editingTransaction.Description" Required="true" />
                         </MudItem>
                         <MudItem xs="12" md="3">
-                            <MudTextField Label="Category" @bind-Value="_editingTransaction.Category" />
+                            <MudSelect T="string" Label="Category" @bind-Value="_editingTransaction.CategoryId" Required="true">
+                                @foreach (var category in _categories.Where(x => x.IsActive || x.Id == _editingTransaction.CategoryIdAsGuid))
+                                {
+                                    <MudSelectItem Value="@category.Id.ToString()">@category.Name</MudSelectItem>
+                                }
+                            </MudSelect>
                         </MudItem>
                         <MudItem xs="12" md="2">
                             <MudNumericField Label="Amount"
@@ -103,12 +108,12 @@
                                              Disabled="@(!_editingTransaction.IsLatest)" />
                         </MudItem>
                         <MudItem xs="12" md="2">
-                            <MudSelect T="string"
+                            <MudSelect T="TransactionType"
                                        Label="Type"
                                        @bind-Value="_editingTransaction.Type"
                                        Disabled="@(!_editingTransaction.IsLatest)">
-                                <MudSelectItem Value="@("income")">Income</MudSelectItem>
-                                <MudSelectItem Value="@("expense")">Expense</MudSelectItem>
+                                <MudSelectItem Value="@TransactionType.Income">Income</MudSelectItem>
+                                <MudSelectItem Value="@TransactionType.Expense">Expense</MudSelectItem>
                             </MudSelect>
                         </MudItem>
                         <MudItem xs="12" md="1">
@@ -212,6 +217,7 @@
     // full visible accounts (includes inactive) used for mapping historical transactions to names
     private readonly List<Treasury.App.Domain.Account> _visibleAccounts = new();
     private readonly List<Treasury.App.Domain.Tag> _tags = new();
+    private readonly List<Treasury.App.Domain.Category> _categories = new();
     private readonly Dictionary<Guid, List<Treasury.App.Domain.Tag>> _transactionTags = new();
     private readonly HashSet<Guid> _transferLinkedTransactionIds = new();
     private readonly HashSet<Guid> _selectedTagIds = new();
@@ -232,6 +238,7 @@
         _accounts.Clear();
         _visibleAccounts.Clear();
         _tags.Clear();
+        _categories.Clear();
         _transferLinkedTransactionIds.Clear();
         _transactions.Clear();
         _transactionTags.Clear();
@@ -247,6 +254,11 @@
         var visibleAccountIds = _visibleAccounts.Select(x => x.Id).ToHashSet();
 
         _tags.AddRange(await DbContext.Tags
+            .Where(x => x.HouseholdId == _currentUser.HouseholdId)
+            .OrderBy(x => x.Name)
+            .ToListAsync());
+
+        _categories.AddRange(await DbContext.Categories
             .Where(x => x.HouseholdId == _currentUser.HouseholdId)
             .OrderBy(x => x.Name)
             .ToListAsync());
@@ -289,6 +301,15 @@
         {
             _newTransaction.AccountId = _accounts[0].Id.ToString();
         }
+
+        if (string.IsNullOrWhiteSpace(_newTransaction.Category))
+        {
+            var defaultCategory = _categories.FirstOrDefault(x => x.IsActive);
+            if (defaultCategory is not null)
+            {
+                _newTransaction.Category = defaultCategory.Name;
+            }
+        }
     }
 
     private async Task<ApplicationUser?> GetCurrentUserAsync()
@@ -323,9 +344,12 @@
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_newTransaction.Description) || string.IsNullOrWhiteSpace(_newTransaction.AccountId) || _newTransaction.Amount <= 0m)
+        if (string.IsNullOrWhiteSpace(_newTransaction.Description)
+            || string.IsNullOrWhiteSpace(_newTransaction.AccountId)
+            || string.IsNullOrWhiteSpace(_newTransaction.Category)
+            || _newTransaction.Amount <= 0m)
         {
-            Snackbar.Add("Description, account and a positive amount are required.", Severity.Warning);
+            Snackbar.Add("Description, account, category and a positive amount are required.", Severity.Warning);
             return;
         }
 
@@ -355,19 +379,41 @@
             return;
         }
 
-        var normalizedType = TransactionBalanceMath.NormalizeType(_newTransaction.Type);
-        var delta = TransactionBalanceMath.GetDelta(_newTransaction.Amount, normalizedType);
+        var normalizedCategoryName = _newTransaction.Category.Trim();
+        var category = await DbContext.Categories
+            .SingleOrDefaultAsync(x => x.HouseholdId == currentUser.HouseholdId && x.Name.ToLower() == normalizedCategoryName.ToLower());
+        if (category is null)
+        {
+            category = new Treasury.App.Domain.Category
+            {
+                HouseholdId = currentUser.HouseholdId,
+                Name = normalizedCategoryName,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            DbContext.Categories.Add(category);
+        }
+        else if (!category.IsActive)
+        {
+            Snackbar.Add("Selected category is disabled.", Severity.Warning);
+            return;
+        }
+
+        var delta = TransactionBalanceMath.GetDelta(_newTransaction.Amount, _newTransaction.Type);
         var utcNow = DateTime.UtcNow;
 
         var transaction = new Treasury.App.Domain.Transaction
         {
             HouseholdId = account.HouseholdId,
             AccountId = account.Id,
+            CategoryId = category.Id,
             Description = _newTransaction.Description.Trim(),
-            Category = string.IsNullOrWhiteSpace(_newTransaction.Category) ? "General" : _newTransaction.Category.Trim(),
+            Category = category.Name,
             Amount = _newTransaction.Amount,
             Currency = account.Currency,
-            Type = normalizedType,
+            Type = _newTransaction.Type,
             TransactionDate = _newTransaction.TransactionDate ?? utcNow,
             CreatedAt = utcNow,
             UpdatedAt = utcNow
@@ -410,9 +456,9 @@
         }
 
         _newTransaction.Description = string.Empty;
-        _newTransaction.Category = "General";
+        _newTransaction.Category = _categories.FirstOrDefault(x => x.IsActive)?.Name ?? string.Empty;
         _newTransaction.Amount = 0m;
-        _newTransaction.Type = "expense";
+        _newTransaction.Type = TransactionType.Expense;
         _newTransaction.TransactionDate = DateTime.UtcNow;
         _selectedTagIds.Clear();
 
@@ -432,8 +478,8 @@
         {
             Id = transaction.Id,
             AccountId = transaction.AccountId,
+            CategoryId = transaction.CategoryId.ToString(),
             Description = transaction.Description,
-            Category = transaction.Category,
             Amount = transaction.Amount,
             Type = transaction.Type,
             TransactionDate = transaction.TransactionDate,
@@ -485,8 +531,8 @@
         var request = new UpdateTransactionRequest
         {
             Id = _editingTransaction.Id,
+            CategoryId = _editingTransaction.CategoryIdAsGuid,
             Description = _editingTransaction.Description,
-            Category = _editingTransaction.Category,
             Amount = _editingTransaction.IsLatest ? _editingTransaction.Amount : null,
             Type = _editingTransaction.IsLatest ? _editingTransaction.Type : null,
             TransactionDate = _editingTransaction.IsLatest ? _editingTransaction.TransactionDate : null,
@@ -535,7 +581,7 @@
 
     private bool IsTransferLinked(Treasury.App.Domain.Transaction transaction) =>
         _transferLinkedTransactionIds.Contains(transaction.Id)
-        || transaction.Type is "transfer-in" or "transfer-out";
+        || transaction.Type is TransactionType.TransferIn or TransactionType.TransferOut;
 
     private bool IsLatestTransaction(Treasury.App.Domain.Transaction transaction)
     {
@@ -552,10 +598,10 @@
     private sealed class NewTransactionForm
     {
         public string AccountId { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
-        public string Category { get; set; } = "General";
         public decimal Amount { get; set; }
-        public string Type { get; set; } = "expense";
+        public TransactionType Type { get; set; } = TransactionType.Expense;
         public DateTime? TransactionDate { get; set; } = DateTime.UtcNow;
     }
 
@@ -563,10 +609,11 @@
     {
         public Guid Id { get; set; }
         public Guid AccountId { get; set; }
+        public string CategoryId { get; set; } = string.Empty;
+        public Guid CategoryIdAsGuid => Guid.TryParse(CategoryId, out var parsed) ? parsed : Guid.Empty;
         public string Description { get; set; } = string.Empty;
-        public string Category { get; set; } = "General";
         public decimal Amount { get; set; }
-        public string Type { get; set; } = "expense";
+        public TransactionType Type { get; set; } = TransactionType.Expense;
         public DateTime? TransactionDate { get; set; } = DateTime.UtcNow;
         public bool IsLatest { get; set; }
     }
