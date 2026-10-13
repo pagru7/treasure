@@ -34,7 +34,13 @@
                     <MudTextField Label="Description" @bind-Value="_newTransaction.Description" Required="true" />
                 </MudItem>
                 <MudItem xs="12" md="2">
-                    <MudTextField Label="Category" @bind-Value="_newTransaction.Category" Required="true" />
+                    <MudAutocomplete T="string"
+                                     Label="Category"
+                                     @bind-Value="_newTransaction.Category"
+                                     SearchFunc="SearchCategoriesAsync"
+                                     OpenOnFocus="true"
+                                     Strict="false"
+                                     Required="true" />
                 </MudItem>
                 <MudItem xs="12" md="2">
                     <MudNumericField Label="Amount" @bind-Value="_newTransaction.Amount" Required="true" Min="0.01m" />
@@ -327,6 +333,24 @@
         }
 
         _selectedTagIds.Remove(tagId);
+    }
+
+    private Task<IEnumerable<string>> SearchCategoriesAsync(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IEnumerable<string> activeCategoryNames = _categories
+            .Where(x => x.IsActive)
+            .Select(x => x.Name);
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Task.FromResult<IEnumerable<string>>(activeCategoryNames.OrderBy(x => x));
+        }
+
+        return Task.FromResult<IEnumerable<string>>(activeCategoryNames
+            .Where(x => x.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x));
     }
 
     private async Task CreateTransactionAsync()
